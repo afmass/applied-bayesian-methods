@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<script src="slides_files/libs/clipboard/clipboard.min.js"></script>
+<script src="slides_files/libs/quarto-html/tabby.min.js"></script>
+<script src="slides_files/libs/quarto-html/popper.min.js"></script>
+<script src="slides_files/libs/quarto-html/tippy.umd.min.js"></script>
+<link href="slides_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="slides_files/libs/quarto-html/light-border.css" rel="stylesheet">
+<link href="slides_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.8.27">
+
+  <meta name="author" content="Alexander Massey">
+  <meta name="dcterms.date" content="2026-04-07">
+  <title>Applied Bayesian Methods</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <link rel="stylesheet" href="slides_files/libs/revealjs/dist/reset.css">
+  <link rel="stylesheet" href="slides_files/libs/revealjs/dist/reveal.css">
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      { color: #003b4f; background-color: #f1f3f5; }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span { color: #003b4f; } /* Normal */
+    code span.al { color: #ad0000; } /* Alert */
+    code span.an { color: #5e5e5e; } /* Annotation */
+    code span.at { color: #657422; } /* Attribute */
+    code span.bn { color: #ad0000; } /* BaseN */
+    code span.bu { } /* BuiltIn */
+    code span.cf { color: #003b4f; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #20794d; } /* Char */
+    code span.cn { color: #8f5902; } /* Constant */
+    code span.co { color: #5e5e5e; } /* Comment */
+    code span.cv { color: #5e5e5e; font-style: italic; } /* CommentVar */
+    code span.do { color: #5e5e5e; font-style: italic; } /* Documentation */
+    code span.dt { color: #ad0000; } /* DataType */
+    code span.dv { color: #ad0000; } /* DecVal */
+    code span.er { color: #ad0000; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #ad0000; } /* Float */
+    code span.fu { color: #4758ab; } /* Function */
+    code span.im { color: #00769e; } /* Import */
+    code span.in { color: #5e5e5e; } /* Information */
+    code span.kw { color: #003b4f; font-weight: bold; } /* Keyword */
+    code span.op { color: #5e5e5e; } /* Operator */
+    code span.ot { color: #003b4f; } /* Other */
+    code span.pp { color: #ad0000; } /* Preprocessor */
+    code span.sc { color: #5e5e5e; } /* SpecialChar */
+    code span.ss { color: #20794d; } /* SpecialString */
+    code span.st { color: #20794d; } /* String */
+    code span.va { color: #111111; } /* Variable */
+    code span.vs { color: #20794d; } /* VerbatimString */
+    code span.wa { color: #5e5e5e; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="slides_files/libs/revealjs/dist/theme/quarto-243df9218708c6bc3b78d97ca0c84cb3.css">
+  <link rel="stylesheet" href="assets/custom.scss">
+  <link href="slides_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
+  <link href="slides_files/libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
+  <link href="slides_files/libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
+  <link href="slides_files/libs/revealjs/plugin/quarto-support/footer.css" rel="stylesheet">
+  <style type="text/css">
+    .reveal div.sourceCode {
+      margin: 0;
+      overflow: auto;
+    }
+    .reveal div.hanging-indent {
+      margin-left: 1em;
+      text-indent: -1em;
+    }
+    .reveal .slide:not(.center) {
+      height: 100%;
+    }
+    .reveal .slide.scrollable {
+      overflow-y: auto;
+    }
+    .reveal .footnotes {
+      height: 100%;
+      overflow-y: auto;
+    }
+    .reveal .slide .absolute {
+      position: absolute;
+      display: block;
+    }
+    .reveal .footnotes ol {
+      counter-reset: ol;
+      list-style-type: none; 
+      margin-left: 0;
+    }
+    .reveal .footnotes ol li:before {
+      counter-increment: ol;
+      content: counter(ol) ". "; 
+    }
+    .reveal .footnotes ol li > p:first-child {
+      display: inline-block;
+    }
+    .reveal .slide ul,
+    .reveal .slide ol {
+      margin-bottom: 0.5em;
+    }
+    .reveal .slide ul li,
+    .reveal .slide ol li {
+      margin-top: 0.4em;
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide ul[role="tablist"] li {
+      margin-bottom: 0;
+    }
+    .reveal .slide ul li > *:first-child,
+    .reveal .slide ol li > *:first-child {
+      margin-block-start: 0;
+    }
+    .reveal .slide ul li > *:last-child,
+    .reveal .slide ol li > *:last-child {
+      margin-block-end: 0;
+    }
+    .reveal .slide .columns:nth-child(3) {
+      margin-block-start: 0.8em;
+    }
+    .reveal blockquote {
+      box-shadow: none;
+    }
+    .reveal .tippy-content>* {
+      margin-top: 0.2em;
+      margin-bottom: 0.7em;
+    }
+    .reveal .tippy-content>*:last-child {
+      margin-bottom: 0.2em;
+    }
+    .reveal .slide > img.stretch.quarto-figure-center,
+    .reveal .slide > img.r-stretch.quarto-figure-center {
+      display: block;
+      margin-left: auto;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-left,
+    .reveal .slide > img.r-stretch.quarto-figure-left  {
+      display: block;
+      margin-left: 0;
+      margin-right: auto; 
+    }
+    .reveal .slide > img.stretch.quarto-figure-right,
+    .reveal .slide > img.r-stretch.quarto-figure-right  {
+      display: block;
+      margin-left: auto;
+      margin-right: 0; 
+    }
+  </style>
+  <script type="module" src="slides_files/libs/quarto-ojs/quarto-ojs-runtime.js"></script>
+  <link href="slides_files/libs/quarto-ojs/quarto-ojs.css" rel="stylesheet">
+</head>
+<body class="quarto-light">
+  <div class="reveal">
+    <div class="slides">
+
+<section id="title-slide" data-background-image="" class="quarto-title-block center">
+  <h1 class="title">Applied Bayesian Methods</h1>
+  <p class="subtitle"><em><strong>DAY 1:</strong> Theoretical introduction and multi-level models</em></p>
+
+<div class="quarto-title-authors">
+<div class="quarto-title-author">
+<div class="quarto-title-author-name">
+Alexander Massey 
+</div>
+</div>
+</div>
+
+  <p class="date">April 7, 2026</p>
+</section>
+<section id="introduction" class="slide level2">
+<h2>Introduction</h2>
+<p>Bayesian inference is based on updating beliefs:</p>
+<p><span class="math display">\[
+p(\theta \mid x) = \frac{p(x \mid \theta)\, p(\theta)}{p(x)}
+\]</span></p>
+<ul>
+<li class="fragment">Likelihood = information from data</li>
+<li class="fragment">Prior = information before data</li>
+<li class="fragment">Posterior = updated belief</li>
+</ul>
+</section>
+<section id="likelihood-example" class="slide level2">
+<h2>Likelihood Example</h2>
+<p>Suppose <span class="math inline">\(X \sim \text{Binomial}(n,\theta)\)</span></p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-1-1.png" width="960" class="r-stretch"></section>
+<section id="adding-a-prior" class="slide level2">
+<h2>Adding a Prior</h2>
+<p>Assume a Beta prior: <span class="math inline">\(\theta \sim \text{Beta}(2,2)\)</span></p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-2-1.png" width="960" class="r-stretch"></section>
+<section id="posterior-distribution" class="slide level2">
+<h2>Posterior Distribution</h2>
+<p>Using conjugacy: <span class="math inline">\(\theta \mid x \sim \text{Beta}(2 + x,\; 2 + n - x)\)</span></p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-3-1.png" width="960" class="r-stretch"></section>
+<section id="likelihood-example-1" class="slide level2">
+<h2>Likelihood Example</h2>
+<p>Suppose <span class="math inline">\(X \sim \text{Binomial}(n,\theta)\)</span></p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-4-1.png" width="960" class="r-stretch"></section>
+<section id="adding-a-prior-1" class="slide level2">
+<h2>Adding a Prior</h2>
+<p>Assume a Beta prior: <span class="math inline">\(\theta \sim \text{Beta}(2,2)\)</span></p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-5-1.png" width="960" class="r-stretch"></section>
+<section id="posterior-distribution-1" class="slide level2">
+<h2>Posterior Distribution</h2>
+<p>Using conjugacy: <span class="math inline">\(\theta \mid x \sim \text{Beta}(2 + x,\; 2 + n - x)\)</span></p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-6-1.png" width="960" class="r-stretch"></section>
+<section id="updating-the-posterior-with-new-data" class="slide level2">
+<h2>Updating the Posterior with New Data</h2>
+<p><em>Simulate coin flips and watch the posterior update in real time.</em></p>
+<div class="ojs-two-col">
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code hidden" id="cb1" data-startfrom="135" data-source-offset="-0"><pre class="sourceCode numberSource js number-lines code-with-copy"><code class="sourceCode javascript" style="counter-reset: source-line 134;"><span id="cb1-135"><a href=""></a>viewof priorParams <span class="op">=</span> Inputs<span class="op">.</span><span class="fu">form</span>([</span>
+<span id="cb1-136"><a href=""></a>  Inputs<span class="op">.</span><span class="fu">range</span>([<span class="fl">0.5</span><span class="op">,</span> <span class="dv">10</span>]<span class="op">,</span> {<span class="dt">value</span><span class="op">:</span> <span class="dv">2</span><span class="op">,</span> <span class="dt">step</span><span class="op">:</span> <span class="fl">0.5</span><span class="op">,</span> <span class="dt">label</span><span class="op">:</span> <span class="st">"Prior α (Beta)"</span>})<span class="op">,</span></span>
+<span id="cb1-137"><a href=""></a>  Inputs<span class="op">.</span><span class="fu">range</span>([<span class="fl">0.5</span><span class="op">,</span> <span class="dv">10</span>]<span class="op">,</span> {<span class="dt">value</span><span class="op">:</span> <span class="dv">2</span><span class="op">,</span> <span class="dt">step</span><span class="op">:</span> <span class="fl">0.5</span><span class="op">,</span> <span class="dt">label</span><span class="op">:</span> <span class="st">"Prior β (Beta)"</span>})</span>
+<span id="cb1-138"><a href=""></a>])</span>
+<span id="cb1-139"><a href=""></a></span>
+<span id="cb1-140"><a href=""></a>viewof trueP <span class="op">=</span> Inputs<span class="op">.</span><span class="fu">range</span>([<span class="dv">0</span><span class="op">,</span> <span class="dv">1</span>]<span class="op">,</span> {<span class="dt">value</span><span class="op">:</span> <span class="fl">0.5</span><span class="op">,</span> <span class="dt">step</span><span class="op">:</span> <span class="fl">0.05</span><span class="op">,</span> <span class="dt">label</span><span class="op">:</span> <span class="st">"True p"</span>})</span>
+<span id="cb1-141"><a href=""></a></span>
+<span id="cb1-142"><a href=""></a>viewof coinData <span class="op">=</span> {</span>
+<span id="cb1-143"><a href=""></a>  <span class="kw">let</span> heads <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb1-144"><a href=""></a>  <span class="kw">let</span> total <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb1-145"><a href=""></a></span>
+<span id="cb1-146"><a href=""></a>  <span class="kw">const</span> flipBtn <span class="op">=</span> <span class="fu">html</span><span class="vs">`&lt;button style="margin:4px 8px 4px 0; padding:6px 14px; font-size:1em;"&gt;🪙 Flip Coin&lt;/button&gt;`</span></span>
+<span id="cb1-147"><a href=""></a>  <span class="kw">const</span> resetBtn <span class="op">=</span> <span class="fu">html</span><span class="vs">`&lt;button style="margin:4px 0; padding:6px 14px; font-size:1em;"&gt;↺ Reset&lt;/button&gt;`</span></span>
+<span id="cb1-148"><a href=""></a>  <span class="kw">const</span> status <span class="op">=</span> <span class="fu">html</span><span class="vs">`&lt;div style="margin-top:8px; font-size:0.95em;"&gt;Flips: 0 | Heads: 0&lt;/div&gt;`</span></span>
+<span id="cb1-149"><a href=""></a>  <span class="kw">const</span> container <span class="op">=</span> <span class="fu">html</span><span class="vs">`&lt;div&gt;</span><span class="sc">${</span>flipBtn<span class="sc">}${</span>resetBtn<span class="sc">}${</span>status<span class="sc">}</span><span class="vs">&lt;/div&gt;`</span></span>
+<span id="cb1-150"><a href=""></a></span>
+<span id="cb1-151"><a href=""></a>  <span class="kw">const</span> dispatch <span class="op">=</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb1-152"><a href=""></a>    status<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`Flips: </span><span class="sc">${</span>total<span class="sc">}</span><span class="vs"> | Heads: </span><span class="sc">${</span>heads<span class="sc">}</span><span class="vs">`</span></span>
+<span id="cb1-153"><a href=""></a>    container<span class="op">.</span><span class="at">value</span> <span class="op">=</span> { heads<span class="op">,</span> total }</span>
+<span id="cb1-154"><a href=""></a>    container<span class="op">.</span><span class="fu">dispatchEvent</span>(<span class="kw">new</span> <span class="bu">CustomEvent</span>(<span class="st">"input"</span>))</span>
+<span id="cb1-155"><a href=""></a>  }</span>
+<span id="cb1-156"><a href=""></a></span>
+<span id="cb1-157"><a href=""></a>  flipBtn<span class="op">.</span><span class="at">onclick</span> <span class="op">=</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb1-158"><a href=""></a>    <span class="kw">const</span> flip <span class="op">=</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">random</span>() <span class="op">&lt;</span> trueP <span class="op">?</span> <span class="dv">1</span> <span class="op">:</span> <span class="dv">0</span></span>
+<span id="cb1-159"><a href=""></a>    total <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb1-160"><a href=""></a>    heads <span class="op">+=</span> flip</span>
+<span id="cb1-161"><a href=""></a>    <span class="fu">dispatch</span>()</span>
+<span id="cb1-162"><a href=""></a>  }</span>
+<span id="cb1-163"><a href=""></a></span>
+<span id="cb1-164"><a href=""></a>  resetBtn<span class="op">.</span><span class="at">onclick</span> <span class="op">=</span> () <span class="kw">=&gt;</span> {</span>
+<span id="cb1-165"><a href=""></a>    heads <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb1-166"><a href=""></a>    total <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb1-167"><a href=""></a>    <span class="fu">dispatch</span>()</span>
+<span id="cb1-168"><a href=""></a>  }</span>
+<span id="cb1-169"><a href=""></a></span>
+<span id="cb1-170"><a href=""></a>  container<span class="op">.</span><span class="at">value</span> <span class="op">=</span> { heads<span class="op">,</span> total }</span>
+<span id="cb1-171"><a href=""></a>  <span class="cf">return</span> container</span>
+<span id="cb1-172"><a href=""></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-1-1" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-1-2" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-1-3" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code hidden" id="cb2" data-startfrom="176" data-source-offset="-0"><pre class="sourceCode numberSource js number-lines code-with-copy"><code class="sourceCode javascript" style="counter-reset: source-line 175;"><span id="cb2-176"><a href=""></a>prior_a <span class="op">=</span> priorParams[<span class="dv">0</span>]</span>
+<span id="cb2-177"><a href=""></a>prior_b <span class="op">=</span> priorParams[<span class="dv">1</span>]</span>
+<span id="cb2-178"><a href=""></a>n_obs   <span class="op">=</span> coinData<span class="op">.</span><span class="at">total</span></span>
+<span id="cb2-179"><a href=""></a>x_obs   <span class="op">=</span> coinData<span class="op">.</span><span class="at">heads</span></span>
+<span id="cb2-180"><a href=""></a>post_a  <span class="op">=</span> prior_a <span class="op">+</span> x_obs</span>
+<span id="cb2-181"><a href=""></a>post_b  <span class="op">=</span> prior_b <span class="op">+</span> (n_obs <span class="op">-</span> x_obs)</span>
+<span id="cb2-182"><a href=""></a>theta   <span class="op">=</span> <span class="bu">Array</span><span class="op">.</span><span class="fu">from</span>({<span class="dt">length</span><span class="op">:</span> <span class="dv">300</span>}<span class="op">,</span> (_<span class="op">,</span> i) <span class="kw">=&gt;</span> i <span class="op">/</span> <span class="dv">299</span>)</span>
+<span id="cb2-183"><a href=""></a></span>
+<span id="cb2-184"><a href=""></a><span class="kw">function</span> <span class="fu">betaPDF</span>(theta<span class="op">,</span> a<span class="op">,</span> b) {</span>
+<span id="cb2-185"><a href=""></a>  <span class="kw">function</span> <span class="fu">lgamma</span>(x) {</span>
+<span id="cb2-186"><a href=""></a>    <span class="kw">const</span> c <span class="op">=</span> [<span class="fl">76.18009172947146</span><span class="op">,-</span><span class="fl">86.50532032941677</span><span class="op">,</span><span class="fl">24.01409824083091</span><span class="op">,</span></span>
+<span id="cb2-187"><a href=""></a>               <span class="op">-</span><span class="fl">1.231739572450155</span><span class="op">,</span><span class="fl">0.1208650973866179e-2</span><span class="op">,-</span><span class="fl">0.5395239384953e-5</span>]<span class="op">;</span></span>
+<span id="cb2-188"><a href=""></a>    <span class="kw">let</span> y <span class="op">=</span> x<span class="op">,</span> tmp <span class="op">=</span> x <span class="op">+</span> <span class="fl">5.5</span><span class="op">;</span></span>
+<span id="cb2-189"><a href=""></a>    tmp <span class="op">-=</span> (x <span class="op">+</span> <span class="fl">0.5</span>) <span class="op">*</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">log</span>(tmp)<span class="op">;</span></span>
+<span id="cb2-190"><a href=""></a>    <span class="kw">let</span> ser <span class="op">=</span> <span class="fl">1.000000000190015</span><span class="op">;</span></span>
+<span id="cb2-191"><a href=""></a>    <span class="cf">for</span> (<span class="kw">let</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> <span class="dv">6</span><span class="op">;</span> j<span class="op">++</span>) ser <span class="op">+=</span> c[j] <span class="op">/</span> <span class="op">++</span>y<span class="op">;</span></span>
+<span id="cb2-192"><a href=""></a>    <span class="cf">return</span> <span class="op">-</span>tmp <span class="op">+</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">log</span>(<span class="fl">2.5066282746310005</span> <span class="op">*</span> ser <span class="op">/</span> x)<span class="op">;</span></span>
+<span id="cb2-193"><a href=""></a>  }</span>
+<span id="cb2-194"><a href=""></a>  <span class="kw">const</span> logB <span class="op">=</span> <span class="fu">lgamma</span>(a) <span class="op">+</span> <span class="fu">lgamma</span>(b) <span class="op">-</span> <span class="fu">lgamma</span>(a <span class="op">+</span> b)<span class="op">;</span></span>
+<span id="cb2-195"><a href=""></a>  <span class="cf">return</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">exp</span>((a <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">log</span>(theta) <span class="op">+</span> (b <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> <span class="bu">Math</span><span class="op">.</span><span class="fu">log</span>(<span class="dv">1</span> <span class="op">-</span> theta) <span class="op">-</span> logB)<span class="op">;</span></span>
+<span id="cb2-196"><a href=""></a>}</span>
+<span id="cb2-197"><a href=""></a></span>
+<span id="cb2-198"><a href=""></a>priorCurve <span class="op">=</span> theta<span class="op">.</span><span class="fu">slice</span>(<span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span>)<span class="op">.</span><span class="fu">map</span>(t <span class="kw">=&gt;</span> ({<span class="dt">theta</span><span class="op">:</span> t<span class="op">,</span> <span class="dt">density</span><span class="op">:</span> <span class="fu">betaPDF</span>(t<span class="op">,</span> prior_a<span class="op">,</span> prior_b)<span class="op">,</span> <span class="dt">curve</span><span class="op">:</span> <span class="st">"Prior"</span>}))</span>
+<span id="cb2-199"><a href=""></a>postCurve  <span class="op">=</span> theta<span class="op">.</span><span class="fu">slice</span>(<span class="dv">1</span><span class="op">,</span> <span class="op">-</span><span class="dv">1</span>)<span class="op">.</span><span class="fu">map</span>(t <span class="kw">=&gt;</span> ({<span class="dt">theta</span><span class="op">:</span> t<span class="op">,</span> <span class="dt">density</span><span class="op">:</span> <span class="fu">betaPDF</span>(t<span class="op">,</span> post_a<span class="op">,</span>  post_b)<span class="op">,</span>  <span class="dt">curve</span><span class="op">:</span> <span class="st">"Posterior"</span>}))</span>
+<span id="cb2-200"><a href=""></a>allCurves  <span class="op">=</span> [<span class="op">...</span>priorCurve<span class="op">,</span> <span class="op">...</span>postCurve]</span>
+<span id="cb2-201"><a href=""></a></span>
+<span id="cb2-202"><a href=""></a>Plot<span class="op">.</span><span class="fu">plot</span>({</span>
+<span id="cb2-203"><a href=""></a>  <span class="dt">width</span><span class="op">:</span> <span class="dv">600</span><span class="op">,</span></span>
+<span id="cb2-204"><a href=""></a>  <span class="dt">height</span><span class="op">:</span> <span class="dv">600</span><span class="op">,</span></span>
+<span id="cb2-205"><a href=""></a>  <span class="dt">marginLeft</span><span class="op">:</span> <span class="dv">50</span><span class="op">,</span></span>
+<span id="cb2-206"><a href=""></a>  <span class="dt">style</span><span class="op">:</span> { <span class="dt">fontSize</span><span class="op">:</span> <span class="st">"24px"</span> }<span class="op">,</span></span>
+<span id="cb2-207"><a href=""></a>  <span class="dt">x</span><span class="op">:</span> {<span class="dt">label</span><span class="op">:</span> <span class="st">"θ"</span><span class="op">,</span> <span class="dt">domain</span><span class="op">:</span> [<span class="dv">0</span><span class="op">,</span> <span class="dv">1</span>]<span class="op">,</span> <span class="dt">labelOffset</span><span class="op">:</span> <span class="dv">36</span>}<span class="op">,</span></span>
+<span id="cb2-208"><a href=""></a>  <span class="dt">y</span><span class="op">:</span> {<span class="dt">label</span><span class="op">:</span> <span class="st">"Density"</span><span class="op">,</span> <span class="dt">nice</span><span class="op">:</span> <span class="kw">true</span>}<span class="op">,</span></span>
+<span id="cb2-209"><a href=""></a>  <span class="dt">color</span><span class="op">:</span> {</span>
+<span id="cb2-210"><a href=""></a>    <span class="dt">legend</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span></span>
+<span id="cb2-211"><a href=""></a>    <span class="dt">domain</span><span class="op">:</span> [<span class="st">"Prior"</span><span class="op">,</span> <span class="st">"Posterior"</span>]<span class="op">,</span></span>
+<span id="cb2-212"><a href=""></a>    <span class="dt">range</span><span class="op">:</span> [<span class="st">"#7bafd4"</span><span class="op">,</span> <span class="st">"#e07b54"</span>]<span class="op">,</span></span>
+<span id="cb2-213"><a href=""></a>    <span class="dt">swatchWidth</span><span class="op">:</span> <span class="dv">30</span><span class="op">,</span></span>
+<span id="cb2-214"><a href=""></a>    <span class="dt">swatchHeight</span><span class="op">:</span> <span class="dv">18</span><span class="op">,</span></span>
+<span id="cb2-215"><a href=""></a>    <span class="dt">style</span><span class="op">:</span> {<span class="dt">fontSize</span><span class="op">:</span> <span class="st">"18px"</span>}</span>
+<span id="cb2-216"><a href=""></a>  }<span class="op">,</span></span>
+<span id="cb2-217"><a href=""></a>  <span class="dt">marks</span><span class="op">:</span> [</span>
+<span id="cb2-218"><a href=""></a>    Plot<span class="op">.</span><span class="fu">lineY</span>(allCurves<span class="op">,</span> {<span class="dt">x</span><span class="op">:</span> <span class="st">"theta"</span><span class="op">,</span> <span class="dt">y</span><span class="op">:</span> <span class="st">"density"</span><span class="op">,</span> <span class="dt">stroke</span><span class="op">:</span> <span class="st">"curve"</span><span class="op">,</span> <span class="dt">strokeWidth</span><span class="op">:</span> <span class="fl">6.5</span>})<span class="op">,</span></span>
+<span id="cb2-219"><a href=""></a>    Plot<span class="op">.</span><span class="fu">ruleY</span>([<span class="dv">0</span>])<span class="op">,</span></span>
+<span id="cb2-220"><a href=""></a>    Plot<span class="op">.</span><span class="fu">ruleX</span>([trueP]<span class="op">,</span> {<span class="dt">stroke</span><span class="op">:</span> <span class="st">"black"</span><span class="op">,</span> <span class="dt">strokeWidth</span><span class="op">:</span> <span class="dv">3</span><span class="op">,</span> <span class="dt">strokeDasharray</span><span class="op">:</span> <span class="st">"6,4"</span>})<span class="op">,</span></span>
+<span id="cb2-221"><a href=""></a>    <span class="op">&lt;!--</span> Plot<span class="op">.</span><span class="fu">ruleX</span>(n_obs <span class="op">&gt;</span> <span class="dv">0</span> <span class="op">?</span> [x_obs <span class="op">/</span> n_obs] <span class="op">:</span> []<span class="op">,</span> {<span class="dt">stroke</span><span class="op">:</span> <span class="st">"steelblue"</span><span class="op">,</span> <span class="dt">strokeWidth</span><span class="op">:</span> <span class="dv">3</span><span class="op">,</span> <span class="dt">strokeDasharray</span><span class="op">:</span> <span class="st">"6,4"</span>}) <span class="op">--&gt;</span></span>
+<span id="cb2-222"><a href=""></a>  ]<span class="op">,</span></span>
+<span id="cb2-223"><a href=""></a>  <span class="dt">caption</span><span class="op">:</span> <span class="vs">`Flips: </span><span class="sc">${</span>n_obs<span class="sc">}</span><span class="vs">  |  Heads: </span><span class="sc">${</span>x_obs<span class="sc">}</span><span class="vs">  |  Posterior: Beta(</span><span class="sc">${</span>post_a<span class="sc">}</span><span class="vs">, </span><span class="sc">${</span>post_b<span class="sc">}</span><span class="vs">)  |  Mean = </span><span class="sc">${</span>(post_a <span class="op">/</span> (post_a <span class="op">+</span> post_b))<span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">3</span>)<span class="sc">}</span><span class="vs">`</span></span>
+<span id="cb2-224"><a href=""></a>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-1" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-2" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-3" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-4" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-5" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-6" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-7" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-8" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-9" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-10" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-11" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div>
+<div id="ojs-cell-2-12" data-nodetype="expression">
+
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section id="posterior-summary-table" class="slide level2">
+<h2>Posterior Summary Table</h2>
+<div class="cell">
+<div class="cell-output-display">
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Quantity</th>
+<th style="text-align: right;">Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Posterior Mean</td>
+<td style="text-align: right;">0.6429</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Posterior Variance</td>
+<td style="text-align: right;">0.0153</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section id="multi-level-model-random-intercept" class="slide level2">
+<h2>Multi-level Model (Random Intercept)</h2>
+<p>Hierarchical data structure:</p>
+<p><span class="math display">\[y_{ij} = \alpha + u_j + \epsilon_{ij}\]</span> <span class="math display">\[u_j \sim \mathcal{N}(0, \sigma_u^2)\]</span> <span class="math display">\[\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2)\]</span></p>
+</section>
+<section id="simulating-multi-level-data" class="slide level2">
+<h2>Simulating Multi-level Data</h2>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-10-1.png" width="960" class="r-stretch"></section>
+<section id="key-takeaways" class="slide level2">
+<h2>Key Takeaways</h2>
+<ul>
+<li class="fragment">Likelihood is a function of <span class="math inline">\(\theta\)</span> for fixed data</li>
+<li class="fragment">Prior encodes pre-data information</li>
+<li class="fragment">Posterior combines prior and data</li>
+<li class="fragment">Multi-level models handle hierarchical structure</li>
+</ul>
+</section>
+<section id="bayesian-connection-to-penalized-regression" class="slide level2">
+<h2>Bayesian Connection To Penalized Regression</h2>
+<div class="fragment">
+<p><strong>Classical Linear Regression Model:</strong> <span class="math display">\[
+y = X\beta + \epsilon
+\]</span></p>
+<p><span class="math display">\[
+y \sim N(X\beta, \sigma^2) \qquad \epsilon \sim N(0, \sigma^2)
+\]</span></p>
+</div>
+<div class="fragment">
+<p><strong>Minimize the sum of squared residuals:</strong></p>
+<p><span class="math display">\[
+\begin{align*}
+\widehat{\beta}_{OLS} &amp;= \arg\min_{\beta} \sum_{i=1}^n (y_i - x_i^T \beta)^2 \\
+&amp;= \arg\min_{\beta} \|  y - X\beta\|_2^2
+\end{align*}
+\]</span></p>
+</div>
+<div class="fragment">
+<p><span style="color:red"><strong>High variance!</strong></span> Small changes in data can lead to large changes in <span class="math inline">\(\hat{\beta}_{OLS}\)</span>.</p>
+</div>
+</section>
+<section class="slide level2">
+
+<h3 id="regularization">Regularization</h3>
+<div class="fragment">
+<p><strong><em>Ridge Regression:</em></strong> <span class="math display">\[
+\widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\| y - X\beta\|_2^2} + \lambda \color{blue}{\|\beta\|_2^2}
+\]</span></p>
+</div>
+<div class="fragment">
+<p><strong><em>Lasso:</em></strong> <span class="math display">\[
+\widehat{\beta}_{Lasso} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \lambda \color{blue}{\|\beta\|_1}
+\]</span></p>
+</div>
+<ul>
+<li class="fragment"><span style="color:red"><strong>Error</strong></span> <span class="math inline">\(+ \lambda\)</span> <span style="color:blue"><strong>Constraint</strong></span></li>
+<li class="fragment"><span class="math inline">\(\lambda\)</span> is a <strong>tuning parameter</strong> that controls the strength of regularization.</li>
+<li class="fragment"><em>glmnet</em> estimates <span class="math inline">\(\lambda\)</span> using <strong>cross-validation</strong>.</li>
+</ul>
+</section>
+<section class="slide level2">
+
+<h3 id="bayesian-linear-regression">Bayesian Linear Regression…</h3>
+<div style="margin-bottom: 50px;">
+
+</div>
+<div class="fragment">
+<p><strong>Maximum A Posteriori (MAP)</strong> estimator maximizes the posterior <span class="math inline">\(P(\beta|y)\)</span> : <span class="math display">\[ \begin{align*}
+\widehat{\beta}_{MAP} &amp;= \arg\max_{\beta} P(\beta|y) \\
+&amp;=\arg\max_{\beta} \frac{P(y|\beta)P(\beta)}{P(y)} \\
+&amp;=\arg\max_{\beta} P(y|\beta)P(\beta) \\
+&amp;=\arg\max_{\beta} \big[ \log P(y|\beta)+\log P(\beta)]\big]
+\end{align*}\]</span></p>
+</div>
+<div style="margin-bottom: 50px;">
+
+</div>
+<div class="fragment">
+<p>Now to specify a <strong>likelihood</strong>, i.e.&nbsp;<span class="math inline">\(P(y|\beta)\)</span>, and <strong>prior</strong>, i.e.&nbsp;<span class="math inline">\(P(\beta)\)</span>.</p>
+</div>
+</section>
+<section class="slide level2">
+
+<h3 id="bayesian-ridge-regression">Bayesian ridge regression</h3>
+<div style="margin-bottom: 50px;">
+
+</div>
+<p><strong>Gaussian likelihood:</strong> <span class="math inline">\(\quad y \sim N(X\beta, \sigma^2)\)</span> <span class="math display">\[ \begin{align*}
+P(y|\beta) &amp;= \frac{1}{(2\pi\sigma^2)^{n/2}} \exp\left(-\frac{1}{2\sigma^2} \|y - X\beta\|_2^2\right) \\
+\boldsymbol{\log P(y|\beta)}&amp;=-\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2} \|y - X\beta\|_2^2 \\
+&amp;\propto -\frac{1}{2\sigma^2} \color{red}{\|y - X\beta\|_2^2}\\
+\end{align*}\]</span></p>
+<div style="margin-bottom: 50px;">
+
+</div>
+<p><strong>Gaussian prior:</strong> <span class="math inline">\(\quad \beta_j \sim N(0, \tau^2)\quad j=1,...,p\quad\)</span> <em>(same for all!)</em></p>
+<p><span class="math display">\[\begin{align*}
+\boldsymbol{\log P(\beta)} \propto -\frac{1}{2\tau^2} \color{blue}{\|\beta\|_2^2}
+\end{align*}\]</span></p>
+</section>
+<section class="slide level2">
+
+<div style="margin-bottom: 50px;">
+
+</div>
+<strong>MAP for Ridge:</strong> <span class="math display">\[ \widehat{\beta}_{MAP} = \arg\max_{\beta} -\frac{1}{2\sigma^2} \|y - X\beta\|_2^2 - \frac{1}{2\tau^2} \|\beta\|_2^2 \]</span>
+<div style="margin-bottom: 50px;">
+
+</div>
+<p><strong>Equivalence to Ridge:</strong> <span class="math display">\[ \widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \frac{\sigma^2}{\tau^2} \color{blue}{\|\beta\|_2^2} \]</span> where <span class="math inline">\(\lambda = \frac{\sigma^2}{\tau^2}\)</span>.</p>
+</section>
+<section class="slide level2">
+
+<h3 id="sparse-bayesian-priors">Sparse Bayesian Priors</h3>
+<p>Use priors with very stronger shrinkage near zero for variable selection.</p>
+<div class="fragment">
+<p><strong>Bayesian Lasso</strong></p>
+<p>Equivalence when using the Laplace prior:</p>
+<p><span class="math display">\[
+\beta_j \sim \frac{1}{2b}\exp\left(-\frac{|\beta_j|}{b}\right)
+\]</span></p>
+</div>
+<div class="fragment">
+<p><strong>Horseshoe Prior</strong></p>
+<p><span class="math display">\[
+\beta_i \mid \tau,\lambda_i \sim N(0,\tau^2\lambda_i^2),
+\qquad
+\lambda_i \sim \text{Half-Cauchy}(0,1)
+\]</span></p>
+<ul>
+<li class="fragment"><strong>Global shrinkage:</strong> <span class="math inline">\(\tau\)</span><br>
+</li>
+<li class="fragment"><strong>Local shrinkage:</strong> <span class="math inline">\(\lambda_i\)</span></li>
+</ul>
+</div>
+<div class="fragment">
+<p>Large coefficients can <strong>escape shrinkage</strong> to zero.</p>
+</div>
+</section>
+<section class="slide level2">
+
+<h3 id="shape-of-the-regularization-priors">Shape of the regularization priors</h3>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-11-1.png" class="quarto-figure quarto-figure-center r-stretch" width="1440"></section>
+<section class="slide level2">
+
+<h3 id="horseshoe-shrinkage-factor">Horseshoe Shrinkage Factor</h3>
+<p>Reparameterize the horseshoe prior using the <strong>shrinkage factor</strong> <span class="math inline">\(\kappa_i = \frac{1}{1+\tau^2\lambda_i^2}\)</span>. <span class="math display">\[
+\kappa_i \sim \text{Beta}(1/2,1/2)
+\]</span> - <span class="math inline">\(\kappa_i \approx 1\)</span> → strong shrinkage (<span class="math inline">\(\beta_i \approx 0\)</span>)<br>
+- <span class="math inline">\(\kappa_i \approx 0\)</span> → little shrinkage (signal preserved)</p>
+
+<img data-src="slides_files/figure-revealjs/unnamed-chunk-12-1.png" class="quarto-figure quarto-figure-center r-stretch" width="1152"></section>
+<section class="slide level2">
+
+
+</section>
+    </div>
+  <div class="quarto-auto-generated-content" style="display: none;">
+<div class="footer footer-default">
+
+</div>
+</div></div>
+
+  <script>window.backupDefine = window.define; window.define = undefined;</script>
+  <script src="slides_files/libs/revealjs/dist/reveal.js"></script>
+  <!-- reveal.js plugins -->
+  <script src="slides_files/libs/revealjs/plugin/quarto-line-highlight/line-highlight.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/pdf-export/pdfexport.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/reveal-menu/menu.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/reveal-menu/quarto-menu.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/quarto-support/support.js"></script>
+  
+
+  <script src="slides_files/libs/revealjs/plugin/notes/notes.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/search/search.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/zoom/zoom.js"></script>
+  <script src="slides_files/libs/revealjs/plugin/math/math.js"></script>
+  <script>window.define = window.backupDefine; window.backupDefine = undefined;</script>
+
+  <script>
+
+      // Full list of configuration options available at:
+      // https://revealjs.com/config/
+      Reveal.initialize({
+'controlsAuto': true,
+'previewLinksAuto': false,
+'pdfSeparateFragments': false,
+'autoAnimateEasing': "ease",
+'autoAnimateDuration': 1,
+'autoAnimateUnmatched': true,
+'jumpToSlide': true,
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'smaller': false,
+ 
+        // Display controls in the bottom right corner
+        controls: false,
+
+        // Help the user learn the controls by providing hints, for example by
+        // bouncing the down arrow when they first encounter a vertical slide
+        controlsTutorial: false,
+
+        // Determines where controls appear, "edges" or "bottom-right"
+        controlsLayout: 'edges',
+
+        // Visibility rule for backwards navigation arrows; "faded", "hidden"
+        // or "visible"
+        controlsBackArrows: 'faded',
+
+        // Display a presentation progress bar
+        progress: true,
+
+        // Display the page number of the current slide
+        slideNumber: 'c/t',
+
+        // 'all', 'print', or 'speaker'
+        showSlideNumber: 'all',
+
+        // Add the current slide number to the URL hash so that reloading the
+        // page/copying the URL will return you to the same slide
+        hash: true,
+
+        // Start with 1 for the hash rather than 0
+        hashOneBasedIndex: false,
+
+        // Flags if we should monitor the hash and change slides accordingly
+        respondToHashChanges: true,
+
+        // Push each slide change to the browser history
+        history: true,
+
+        // Enable keyboard shortcuts for navigation
+        keyboard: true,
+
+        // Enable the slide overview mode
+        overview: true,
+
+        // Disables the default reveal.js slide layout (scaling and centering)
+        // so that you can use custom CSS layout
+        disableLayout: false,
+
+        // Vertical centering of slides
+        center: false,
+
+        // Enables touch navigation on devices with touch input
+        touch: true,
+
+        // Loop the presentation
+        loop: false,
+
+        // Change the presentation direction to be RTL
+        rtl: false,
+
+        // see https://revealjs.com/vertical-slides/#navigation-mode
+        navigationMode: 'linear',
+
+        // Randomizes the order of slides each time the presentation loads
+        shuffle: false,
+
+        // Turns fragments on and off globally
+        fragments: true,
+
+        // Flags whether to include the current fragment in the URL,
+        // so that reloading brings you to the same fragment position
+        fragmentInURL: false,
+
+        // Flags if the presentation is running in an embedded mode,
+        // i.e. contained within a limited portion of the screen
+        embedded: false,
+
+        // Flags if we should show a help overlay when the questionmark
+        // key is pressed
+        help: true,
+
+        // Flags if it should be possible to pause the presentation (blackout)
+        pause: true,
+
+        // Flags if speaker notes should be visible to all viewers
+        showNotes: false,
+
+        // Global override for autoplaying embedded media (null/true/false)
+        autoPlayMedia: null,
+
+        // Global override for preloading lazy-loaded iframes (null/true/false)
+        preloadIframes: null,
+
+        // Number of milliseconds between automatically proceeding to the
+        // next slide, disabled when set to 0, this value can be overwritten
+        // by using a data-autoslide attribute on your slides
+        autoSlide: 0,
+
+        // Stop auto-sliding after user input
+        autoSlideStoppable: true,
+
+        // Use this method for navigation when auto-sliding
+        autoSlideMethod: null,
+
+        // Specify the average time in seconds that you think you will spend
+        // presenting each slide. This is used to show a pacing timer in the
+        // speaker view
+        defaultTiming: null,
+
+        // Enable slide navigation via mouse wheel
+        mouseWheel: false,
+
+        // The display mode that will be used to show slides
+        display: 'block',
+
+        // Hide cursor if inactive
+        hideInactiveCursor: true,
+
+        // Time before the cursor is hidden (in ms)
+        hideCursorTime: 5000,
+
+        // Opens links in an iframe preview overlay
+        previewLinks: false,
+
+        // Transition style (none/fade/slide/convex/concave/zoom)
+        transition: 'none',
+
+        // Transition speed (default/fast/slow)
+        transitionSpeed: 'default',
+
+        // Transition style for full page slide backgrounds
+        // (none/fade/slide/convex/concave/zoom)
+        backgroundTransition: 'none',
+
+        // Number of slides away from the current that are visible
+        viewDistance: 3,
+
+        // Number of slides away from the current that are visible on mobile
+        // devices. It is advisable to set this to a lower number than
+        // viewDistance in order to save resources.
+        mobileViewDistance: 2,
+
+        // The "normal" size of the presentation, aspect ratio will be preserved
+        // when the presentation is scaled to fit different resolutions. Can be
+        // specified using percentage units.
+        width: 1050,
+
+        height: 700,
+
+        // Factor of the display size that should remain empty around the content
+        margin: 0.1,
+
+        math: {
+          mathjax: 'https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js',
+          config: 'TeX-AMS_HTML-full',
+          tex2jax: {
+            inlineMath: [['\\(','\\)']],
+            displayMath: [['\\[','\\]']],
+            balanceBraces: true,
+            processEscapes: false,
+            processRefs: true,
+            processEnvironments: true,
+            preview: 'TeX',
+            skipTags: ['script','noscript','style','textarea','pre','code'],
+            ignoreClass: 'tex2jax_ignore',
+            processClass: 'tex2jax_process'
+          },
+        },
+
+        // reveal.js plugins
+        plugins: [QuartoLineHighlight, PdfExport, RevealMenu, QuartoSupport,
+
+          RevealMath,
+          RevealNotes,
+          RevealSearch,
+          RevealZoom
+        ]
+      });
+    </script>
+    <script>
+      window.addEventListener('load', function () {
+
+        /* ── 1. Title-slide logos (centered, below author) ── */
+        setTimeout(function () {
+          var titleSlide = document.querySelector('#title-slide');
+          if (!titleSlide) return;
+
+          var authorEl = titleSlide.querySelector('.author')
+                      || titleSlide.querySelector('[class*="author"]')
+                      || titleSlide.querySelector('p:nth-child(2)');
+
+          /* Create a flex wrapper to hold both logos side by side */
+          var logoWrapper = document.createElement('div');
+          logoWrapper.className = 'title-logo-wrapper';
+
+          var logo1 = document.createElement('img');
+          logo1.src       = 'images/Logo_GeoData_Paris.png';
+          logo1.className = 'title-logo';
+          logo1.alt       = 'Géodata Paris';
+
+          var logo2 = document.createElement('img');
+          logo2.src       = 'images/Logo-SIReNa.png';
+          logo2.className = 'title-logo';
+          logo2.alt       = 'SIReNa';
+
+          logoWrapper.appendChild(logo1);
+          logoWrapper.appendChild(logo2);
+
+          if (authorEl && authorEl.parentNode === titleSlide) {
+            authorEl.insertAdjacentElement('afterend', logoWrapper);
+          } else if (authorEl) {
+            var ancestor = authorEl;
+            while (ancestor.parentNode !== titleSlide) {
+              ancestor = ancestor.parentNode;
+            }
+            ancestor.insertAdjacentElement('afterend', logoWrapper);
+          } else {
+            titleSlide.appendChild(logoWrapper);
+          }
+
+        }, 500);
+
+        /* ── 2. Corner logo on every NON-title slide ── */
+        var cornerLogo = document.createElement('img');
+        cornerLogo.src       = 'images/Logo-SIReNa.png';
+        cornerLogo.className = 'corner-logo';
+        cornerLogo.alt       = 'Géodata Paris';
+        document.querySelector('.reveal').appendChild(cornerLogo);
+
+        function updateCornerLogo() {
+          var currentSlide = document.querySelector('.reveal .slides .present');
+          if (currentSlide && currentSlide.id === 'title-slide') {
+            cornerLogo.style.display = 'none';
+          } else {
+            cornerLogo.style.display = 'block';
+          }
+        }
+
+        setTimeout(updateCornerLogo, 550);
+        document.querySelector('.reveal').addEventListener('slidechanged', updateCornerLogo);
+      });
+    </script>
+    <script type="ojs-module-contents">
+    eyJjb250ZW50cyI6W3sibWV0aG9kTmFtZSI6ImludGVycHJldCIsImNlbGxOYW1lIjoib2pzLWNlbGwtMSIsImlubGluZSI6ZmFsc2UsInNvdXJjZSI6InZpZXdvZiBwcmlvclBhcmFtcyA9IElucHV0cy5mb3JtKFtcbiAgSW5wdXRzLnJhbmdlKFswLjUsIDEwXSwge3ZhbHVlOiAyLCBzdGVwOiAwLjUsIGxhYmVsOiBcIlByaW9yIM6xIChCZXRhKVwifSksXG4gIElucHV0cy5yYW5nZShbMC41LCAxMF0sIHt2YWx1ZTogMiwgc3RlcDogMC41LCBsYWJlbDogXCJQcmlvciDOsiAoQmV0YSlcIn0pXG5dKVxuXG52aWV3b2YgdHJ1ZVAgPSBJbnB1dHMucmFuZ2UoWzAsIDFdLCB7dmFsdWU6IDAuNSwgc3RlcDogMC4wNSwgbGFiZWw6IFwiVHJ1ZSBwXCJ9KVxuXG52aWV3b2YgY29pbkRhdGEgPSB7XG4gIGxldCBoZWFkcyA9IDBcbiAgbGV0IHRvdGFsID0gMFxuXG4gIGNvbnN0IGZsaXBCdG4gPSBodG1sYDxidXR0b24gc3R5bGU9XCJtYXJnaW46NHB4IDhweCA0cHggMDsgcGFkZGluZzo2cHggMTRweDsgZm9udC1zaXplOjFlbTtcIj7wn6qZIEZsaXAgQ29pbjwvYnV0dG9uPmBcbiAgY29uc3QgcmVzZXRCdG4gPSBodG1sYDxidXR0b24gc3R5bGU9XCJtYXJnaW46NHB4IDA7IHBhZGRpbmc6NnB4IDE0cHg7IGZvbnQtc2l6ZToxZW07XCI+4oa6IFJlc2V0PC9idXR0b24+YFxuICBjb25zdCBzdGF0dXMgPSBodG1sYDxkaXYgc3R5bGU9XCJtYXJnaW4tdG9wOjhweDsgZm9udC1zaXplOjAuOTVlbTtcIj5GbGlwczogMCB8IEhlYWRzOiAwPC9kaXY+YFxuICBjb25zdCBjb250YWluZXIgPSBodG1sYDxkaXY+JHtmbGlwQnRufSR7cmVzZXRCdG59JHtzdGF0dXN9PC9kaXY+YFxuXG4gIGNvbnN0IGRpc3BhdGNoID0gKCkgPT4ge1xuICAgIHN0YXR1cy50ZXh0Q29udGVudCA9IGBGbGlwczogJHt0b3RhbH0gfCBIZWFkczogJHtoZWFkc31gXG4gICAgY29udGFpbmVyLnZhbHVlID0geyBoZWFkcywgdG90YWwgfVxuICAgIGNvbnRhaW5lci5kaXNwYXRjaEV2ZW50KG5ldyBDdXN0b21FdmVudChcImlucHV0XCIpKVxuICB9XG5cbiAgZmxpcEJ0bi5vbmNsaWNrID0gKCkgPT4ge1xuICAgIGNvbnN0IGZsaXAgPSBNYXRoLnJhbmRvbSgpIDwgdHJ1ZVAgPyAxIDogMFxuICAgIHRvdGFsICs9IDFcbiAgICBoZWFkcyArPSBmbGlwXG4gICAgZGlzcGF0Y2goKVxuICB9XG5cbiAgcmVzZXRCdG4ub25jbGljayA9ICgpID0+IHtcbiAgICBoZWFkcyA9IDBcbiAgICB0b3RhbCA9IDBcbiAgICBkaXNwYXRjaCgpXG4gIH1cblxuICBjb250YWluZXIudmFsdWUgPSB7IGhlYWRzLCB0b3RhbCB9XG4gIHJldHVybiBjb250YWluZXJcbn1cbiJ9LHsibWV0aG9kTmFtZSI6ImludGVycHJldCIsImNlbGxOYW1lIjoib2pzLWNlbGwtMiIsImlubGluZSI6ZmFsc2UsInNvdXJjZSI6InByaW9yX2EgPSBwcmlvclBhcmFtc1swXVxucHJpb3JfYiA9IHByaW9yUGFyYW1zWzFdXG5uX29icyAgID0gY29pbkRhdGEudG90YWxcbnhfb2JzICAgPSBjb2luRGF0YS5oZWFkc1xucG9zdF9hICA9IHByaW9yX2EgKyB4X29ic1xucG9zdF9iICA9IHByaW9yX2IgKyAobl9vYnMgLSB4X29icylcbnRoZXRhICAgPSBBcnJheS5mcm9tKHtsZW5ndGg6IDMwMH0sIChfLCBpKSA9PiBpIC8gMjk5KVxuXG5mdW5jdGlvbiBiZXRhUERGKHRoZXRhLCBhLCBiKSB7XG4gIGZ1bmN0aW9uIGxnYW1tYSh4KSB7XG4gICAgY29uc3QgYyA9IFs3Ni4xODAwOTE3Mjk0NzE0NiwtODYuNTA1MzIwMzI5NDE2NzcsMjQuMDE0MDk4MjQwODMwOTEsXG4gICAgICAgICAgICAgICAtMS4yMzE3Mzk1NzI0NTAxNTUsMC4xMjA4NjUwOTczODY2MTc5ZS0yLC0wLjUzOTUyMzkzODQ5NTNlLTVdO1xuICAgIGxldCB5ID0geCwgdG1wID0geCArIDUuNTtcbiAgICB0bXAgLT0gKHggKyAwLjUpICogTWF0aC5sb2codG1wKTtcbiAgICBsZXQgc2VyID0gMS4wMDAwMDAwMDAxOTAwMTU7XG4gICAgZm9yIChsZXQgaiA9IDA7IGogPCA2OyBqKyspIHNlciArPSBjW2pdIC8gKyt5O1xuICAgIHJldHVybiAtdG1wICsgTWF0aC5sb2coMi41MDY2MjgyNzQ2MzEwMDA1ICogc2VyIC8geCk7XG4gIH1cbiAgY29uc3QgbG9nQiA9IGxnYW1tYShhKSArIGxnYW1tYShiKSAtIGxnYW1tYShhICsgYik7XG4gIHJldHVybiBNYXRoLmV4cCgoYSAtIDEpICogTWF0aC5sb2codGhldGEpICsgKGIgLSAxKSAqIE1hdGgubG9nKDEgLSB0aGV0YSkgLSBsb2dCKTtcbn1cblxucHJpb3JDdXJ2ZSA9IHRoZXRhLnNsaWNlKDEsIC0xKS5tYXAodCA9PiAoe3RoZXRhOiB0LCBkZW5zaXR5OiBiZXRhUERGKHQsIHByaW9yX2EsIHByaW9yX2IpLCBjdXJ2ZTogXCJQcmlvclwifSkpXG5wb3N0Q3VydmUgID0gdGhldGEuc2xpY2UoMSwgLTEpLm1hcCh0ID0+ICh7dGhldGE6IHQsIGRlbnNpdHk6IGJldGFQREYodCwgcG9zdF9hLCAgcG9zdF9iKSwgIGN1cnZlOiBcIlBvc3RlcmlvclwifSkpXG5hbGxDdXJ2ZXMgID0gWy4uLnByaW9yQ3VydmUsIC4uLnBvc3RDdXJ2ZV1cblxuUGxvdC5wbG90KHtcbiAgd2lkdGg6IDYwMCxcbiAgaGVpZ2h0OiA2MDAsXG4gIG1hcmdpbkxlZnQ6IDUwLFxuICBzdHlsZTogeyBmb250U2l6ZTogXCIyNHB4XCIgfSxcbiAgeDoge2xhYmVsOiBcIs64XCIsIGRvbWFpbjogWzAsIDFdLCBsYWJlbE9mZnNldDogMzZ9LFxuICB5OiB7bGFiZWw6IFwiRGVuc2l0eVwiLCBuaWNlOiB0cnVlfSxcbiAgY29sb3I6IHtcbiAgICBsZWdlbmQ6IHRydWUsXG4gICAgZG9tYWluOiBbXCJQcmlvclwiLCBcIlBvc3RlcmlvclwiXSxcbiAgICByYW5nZTogW1wiIzdiYWZkNFwiLCBcIiNlMDdiNTRcIl0sXG4gICAgc3dhdGNoV2lkdGg6IDMwLFxuICAgIHN3YXRjaEhlaWdodDogMTgsXG4gICAgc3R5bGU6IHtmb250U2l6ZTogXCIxOHB4XCJ9XG4gIH0sXG4gIG1hcmtzOiBbXG4gICAgUGxvdC5saW5lWShhbGxDdXJ2ZXMsIHt4OiBcInRoZXRhXCIsIHk6IFwiZGVuc2l0eVwiLCBzdHJva2U6IFwiY3VydmVcIiwgc3Ryb2tlV2lkdGg6IDYuNX0pLFxuICAgIFBsb3QucnVsZVkoWzBdKSxcbiAgICBQbG90LnJ1bGVYKFt0cnVlUF0sIHtzdHJva2U6IFwiYmxhY2tcIiwgc3Ryb2tlV2lkdGg6IDMsIHN0cm9rZURhc2hhcnJheTogXCI2LDRcIn0pLFxuICAgIDwhLS0gUGxvdC5ydWxlWChuX29icyA+IDAgPyBbeF9vYnMgLyBuX29ic10gOiBbXSwge3N0cm9rZTogXCJzdGVlbGJsdWVcIiwgc3Ryb2tlV2lkdGg6IDMsIHN0cm9rZURhc2hhcnJheTogXCI2LDRcIn0pIC0tPlxuICBdLFxuICBjYXB0aW9uOiBgRmxpcHM6ICR7bl9vYnN9ICB8ICBIZWFkczogJHt4X29ic30gIHwgIFBvc3RlcmlvcjogQmV0YSgke3Bvc3RfYX0sICR7cG9zdF9ifSkgIHwgIE1lYW4gPSAkeyhwb3N0X2EgLyAocG9zdF9hICsgcG9zdF9iKSkudG9GaXhlZCgzKX1gXG59KVxuIn0seyJtZXRob2ROYW1lIjoiaW50ZXJwcmV0UXVpZXQiLCJzb3VyY2UiOiJzaGlueUlucHV0KCdwcmlvclBhcmFtcycpIn0seyJtZXRob2ROYW1lIjoiaW50ZXJwcmV0UXVpZXQiLCJzb3VyY2UiOiJzaGlueUlucHV0KCd0cnVlUCcpIn0seyJtZXRob2ROYW1lIjoiaW50ZXJwcmV0UXVpZXQiLCJzb3VyY2UiOiJzaGlueUlucHV0KCdjb2luRGF0YScpIn1dfQ==
+    </script>
+    <script type="module">
+    if (window.location.protocol === "file:") { alert("The OJS runtime does not work with file:// URLs. Please use a web server to view this document."); }
+    window._ojs.paths.runtimeToDoc = "../../..";
+    window._ojs.paths.runtimeToRoot = "../../..";
+    window._ojs.paths.docToRoot = "";
+    window._ojs.selfContained = false;
+    window._ojs.runtime.interpretFromScriptTags();
+    </script>
+    
+    <script>
+      // htmlwidgets need to know to resize themselves when slides are shown/hidden.
+      // Fire the "slideenter" event (handled by htmlwidgets.js) when the current
+      // slide changes (different for each slide format).
+      (function () {
+        // dispatch for htmlwidgets
+        function fireSlideEnter() {
+          const event = window.document.createEvent("Event");
+          event.initEvent("slideenter", true, true);
+          window.document.dispatchEvent(event);
+        }
+
+        function fireSlideChanged(previousSlide, currentSlide) {
+          fireSlideEnter();
+
+          // dispatch for shiny
+          if (window.jQuery) {
+            if (previousSlide) {
+              window.jQuery(previousSlide).trigger("hidden");
+            }
+            if (currentSlide) {
+              window.jQuery(currentSlide).trigger("shown");
+            }
+          }
+        }
+
+        // hookup for slidy
+        if (window.w3c_slidy) {
+          window.w3c_slidy.add_observer(function (slide_num) {
+            // slide_num starts at position 1
+            fireSlideChanged(null, w3c_slidy.slides[slide_num - 1]);
+          });
+        }
+
+      })();
+    </script>
+
+    <script id="quarto-html-after-body" type="application/javascript">
+      window.document.addEventListener("DOMContentLoaded", function (event) {
+        const tabsets =  window.document.querySelectorAll(".panel-tabset-tabby")
+        tabsets.forEach(function(tabset) {
+          const tabby = new Tabby('#' + tabset.id);
+        });
+        const isCodeAnnotation = (el) => {
+          for (const clz of el.classList) {
+            if (clz.startsWith('code-annotation-')) {                     
+              return true;
+            }
+          }
+          return false;
+        }
+        const onCopySuccess = function(e) {
+          // button target
+          const button = e.trigger;
+          // don't keep focus
+          button.blur();
+          // flash "checked"
+          button.classList.add('code-copy-button-checked');
+          var currentTitle = button.getAttribute("title");
+          button.setAttribute("title", "Copied!");
+          let tooltip;
+          if (window.bootstrap) {
+            button.setAttribute("data-bs-toggle", "tooltip");
+            button.setAttribute("data-bs-placement", "left");
+            button.setAttribute("data-bs-title", "Copied!");
+            tooltip = new bootstrap.Tooltip(button, 
+              { trigger: "manual", 
+                customClass: "code-copy-button-tooltip",
+                offset: [0, -8]});
+            tooltip.show();    
+          }
+          setTimeout(function() {
+            if (tooltip) {
+              tooltip.hide();
+              button.removeAttribute("data-bs-title");
+              button.removeAttribute("data-bs-toggle");
+              button.removeAttribute("data-bs-placement");
+            }
+            button.setAttribute("title", currentTitle);
+            button.classList.remove('code-copy-button-checked');
+          }, 1000);
+          // clear code selection
+          e.clearSelection();
+        }
+        const getTextToCopy = function(trigger) {
+          const outerScaffold = trigger.parentElement.cloneNode(true);
+          const codeEl = outerScaffold.querySelector('code');
+          for (const childEl of codeEl.children) {
+            if (isCodeAnnotation(childEl)) {
+              childEl.remove();
+            }
+          }
+          return codeEl.innerText;
+        }
+        const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+          text: getTextToCopy
+        });
+        clipboard.on('success', onCopySuccess);
+        if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+          const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+            text: getTextToCopy,
+            container: window.document.getElementById('quarto-embedded-source-code-modal')
+          });
+          clipboardModal.on('success', onCopySuccess);
+        }
+          var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+          var mailtoRegex = new RegExp(/^mailto:/);
+            var filterRegex = new RegExp('/' + window.location.host + '/');
+          var isInternal = (href) => {
+              return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+          }
+          // Inspect non-navigation links and adorn them if external
+         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          for (var i=0; i<links.length; i++) {
+            const link = links[i];
+            if (!isInternal(link.href)) {
+              // undo the damage that might have been done by quarto-nav.js in the case of
+              // links that we want to consider external
+              if (link.dataset.originalHref !== undefined) {
+                link.href = link.dataset.originalHref;
+              }
+            }
+          }
+        function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+          const config = {
+            allowHTML: true,
+            maxWidth: 500,
+            delay: 100,
+            arrow: false,
+            appendTo: function(el) {
+                return el.closest('section.slide') || el.parentElement;
+            },
+            interactive: true,
+            interactiveBorder: 10,
+            theme: 'light-border',
+            placement: 'bottom-start',
+          };
+          if (contentFn) {
+            config.content = contentFn;
+          }
+          if (onTriggerFn) {
+            config.onTrigger = onTriggerFn;
+          }
+          if (onUntriggerFn) {
+            config.onUntrigger = onUntriggerFn;
+          }
+            config['offset'] = [0,0];
+            config['maxWidth'] = 700;
+          window.tippy(el, config); 
+        }
+        const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+        for (var i=0; i<noterefs.length; i++) {
+          const ref = noterefs[i];
+          tippyHover(ref, function() {
+            // use id or data attribute instead here
+            let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+            try { href = new URL(href).hash; } catch {}
+            const id = href.replace(/^#\/?/, "");
+            const note = window.document.getElementById(id);
+            if (note) {
+              return note.innerHTML;
+            } else {
+              return "";
+            }
+          });
+        }
+        const findCites = (el) => {
+          const parentEl = el.parentElement;
+          if (parentEl) {
+            const cites = parentEl.dataset.cites;
+            if (cites) {
+              return {
+                el,
+                cites: cites.split(' ')
+              };
+            } else {
+              return findCites(el.parentElement)
+            }
+          } else {
+            return undefined;
+          }
+        };
+        var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+        for (var i=0; i<bibliorefs.length; i++) {
+          const ref = bibliorefs[i];
+          const citeInfo = findCites(ref);
+          if (citeInfo) {
+            tippyHover(citeInfo.el, function() {
+              var popup = window.document.createElement('div');
+              citeInfo.cites.forEach(function(cite) {
+                var citeDiv = window.document.createElement('div');
+                citeDiv.classList.add('hanging-indent');
+                citeDiv.classList.add('csl-entry');
+                var biblioDiv = window.document.getElementById('ref-' + cite);
+                if (biblioDiv) {
+                  citeDiv.innerHTML = biblioDiv.innerHTML;
+                }
+                popup.appendChild(citeDiv);
+              });
+              return popup.innerHTML;
+            });
+          }
+        }
+      });
+      </script>
+    
+
+</body></html>

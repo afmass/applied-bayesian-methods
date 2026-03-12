@@ -1,0 +1,10 @@
+---
+title: "OJS Test"
+format: revealjs
+---
+
+## Test
+```{ojs}
+viewof x = Inputs.range([0, 10], {value: 5, label: "x"})
+x * 2
+```
