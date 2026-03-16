@@ -1,0 +1,16 @@
+/.quarto/
+**/*.quarto_ipynb
+
+# Quarto output
+*.html
+*_files/
+
+# RStudio
+.Rproj.user
+
+# macOS
+.DS_Store
+
+# R
+.Rhistory
+.RData
