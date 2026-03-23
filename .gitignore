@@ -12,7 +12,7 @@
 .DS_Store
 
 # R
-.Rhistory
-.RData
+*.Rhistory
+*.RData
 
 *scratch.R

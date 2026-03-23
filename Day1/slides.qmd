@@ -32,15 +32,16 @@ $$
 p(\theta \mid x) = \frac{p(x \mid \theta)\, p(\theta)}{p(x)}
 $$
 
-- Likelihood = information from data
-- Prior = information before data
-- Posterior = updated belief
+-   Likelihood = information from data
+-   Prior = information before data
+-   Posterior = updated belief
 
 ------------------------------------------------------------------------
 
 ## Likelihood Example
 
 Suppose $X \sim \text{Binomial}(n,\theta)$
+
 ```{r}
 n <- 10
 x <- 7
@@ -57,6 +58,7 @@ plot(theta, likelihood,
 ## Adding a Prior
 
 Assume a Beta prior: $\theta \sim \text{Beta}(2,2)$
+
 ```{r}
 prior_a <- 2
 prior_b <- 2
@@ -72,6 +74,7 @@ plot(theta, prior,
 ## Posterior Distribution
 
 Using conjugacy: $\theta \mid x \sim \text{Beta}(2 + x,\; 2 + n - x)$
+
 ```{r}
 posterior <- dbeta(theta, prior_a + x, prior_b + n - x)
 plot(theta, posterior,
@@ -80,12 +83,12 @@ plot(theta, posterior,
      xlab = "theta", ylab = "Density")
 ```
 
-
 ------------------------------------------------------------------------
 
 ## Likelihood Example
 
 Suppose $X \sim \text{Binomial}(n,\theta)$
+
 ```{r}
 n <- 10
 x <- 7
@@ -100,7 +103,9 @@ plot(theta, likelihood,
 ------------------------------------------------------------------------
 
 ## Adding a Prior
+
 Assume a Beta prior: $\theta \sim \text{Beta}(2,2)$
+
 ```{r}
 prior_a <- 2
 prior_b <- 2
@@ -114,7 +119,9 @@ plot(theta, prior,
 ------------------------------------------------------------------------
 
 ## Posterior Distribution
+
 Using conjugacy: $\theta \mid x \sim \text{Beta}(2 + x,\; 2 + n - x)$
+
 ```{r}
 posterior <- dbeta(theta, prior_a + x, prior_b + n - x)
 plot(theta, posterior,
@@ -129,7 +136,7 @@ plot(theta, posterior,
 
 *Simulate coin flips and watch the posterior update in real time.*
 
-<div class="ojs-two-col">
+::: ojs-two-col
 ```{ojs}
 //| echo: false
 viewof priorParams = Inputs.form([
@@ -171,6 +178,7 @@ viewof coinData = {
   return container
 }
 ```
+
 ```{ojs}
 //| echo: false
 prior_a = priorParams[0]
@@ -223,12 +231,12 @@ Plot.plot({
   caption: `Flips: ${n_obs}  |  Heads: ${x_obs}  |  Posterior: Beta(${post_a}, ${post_b})  |  Mean = ${(post_a / (post_a + post_b)).toFixed(3)}`
 })
 ```
-
-</div>
+:::
 
 ------------------------------------------------------------------------
 
 ## Posterior Summary Table
+
 ```{r}
 library(knitr)
 posterior_mean <- (prior_a + x) / (prior_a + prior_b + n)
@@ -247,13 +255,12 @@ kable(results, digits = 4)
 
 Hierarchical data structure:
 
-$$y_{ij} = \alpha + u_j + \epsilon_{ij}$$
-$$u_j \sim \mathcal{N}(0, \sigma_u^2)$$
-$$\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2)$$
+$$y_{ij} = \alpha + u_j + \epsilon_{ij}$$ $$u_j \sim \mathcal{N}(0, \sigma_u^2)$$ $$\epsilon_{ij} \sim \mathcal{N}(0, \sigma^2)$$
 
 ------------------------------------------------------------------------
 
 ## Simulating Multi-level Data
+
 ```{r}
 set.seed(123)
 J   <- 8
@@ -270,30 +277,26 @@ boxplot(y ~ group,
 
 ## Key Takeaways
 
-- Likelihood is a function of $\theta$ for fixed data
-- Prior encodes pre-data information
-- Posterior combines prior and data
-- Multi-level models handle hierarchical structure
+-   Likelihood is a function of $\theta$ for fixed data
+-   Prior encodes pre-data information
+-   Posterior combines prior and data
+-   Multi-level models handle hierarchical structure
 
 ------------------------------------------------------------------------
 
 ## Bayesian Connection To Penalized Regression
 
-<div class="fragment">
-
-**Classical Linear Regression Model:**
-$$
+::: fragment
+**Classical Linear Regression Model:** $$
 y = X\beta + \epsilon
 $$
 
 $$
 y \sim N(X\beta, \sigma^2) \qquad \epsilon \sim N(0, \sigma^2)
 $$
+:::
 
-</div>
-
-<div class="fragment">
-
+::: fragment
 **Minimize the sum of squared residuals:**
 
 $$
@@ -302,40 +305,31 @@ $$
 &= \arg\min_{\beta} \|  y - X\beta\|_2^2
 \end{align*}
 $$
+:::
 
-</div>
-
-<div class="fragment">
-
-<span style="color:red">**High variance!**</span> Small changes in data can lead to large changes in $\hat{\beta}_{OLS}$.
-
-</div>
+::: fragment
+[**High variance!**]{style="color:red"} Small changes in data can lead to large changes in $\hat{\beta}_{OLS}$.
+:::
 
 ------------------------------------------------------------------------
 
 ### Regularization
 
-<div class="fragment">
-
-***Ridge Regression:***
-$$
+::: fragment
+***Ridge Regression:*** $$
 \widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\| y - X\beta\|_2^2} + \lambda \color{blue}{\|\beta\|_2^2}
 $$
+:::
 
-</div>
-
-<div class="fragment">
-
-***Lasso:***
-$$
+::: fragment
+***Lasso:*** $$
 \widehat{\beta}_{Lasso} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \lambda \color{blue}{\|\beta\|_1}
 $$
+:::
 
-</div>
-
-- <span style="color:red">**Error**</span> $+ \lambda$ <span style="color:blue">**Constraint**</span>
-- $\lambda$ is a **tuning parameter** that controls the strength of regularization.
-- *glmnet* estimates $\lambda$ using **cross-validation**.
+-   [**Error**]{style="color:red"} $+ \lambda$ [**Constraint**]{style="color:blue"}
+-   $\lambda$ is a **tuning parameter** that controls the strength of regularization.
+-   *glmnet* estimates $\lambda$ using **cross-validation**.
 
 ------------------------------------------------------------------------
 
@@ -343,50 +337,48 @@ $$
 
 ![](images/ridge_lasso_esl.png){fig-align="center" width="80%"}
 
-<div style="position:absolute; bottom:-30px; left:0px; font-size:0.6em; color:gray;">
+::: {style="position:absolute; bottom:-30px; left:0px; font-size:0.6em; color:gray;"}
 Adapted from Hastie, Tibshirani, and Friedman (2009), <i>The Elements of Statistical Learning</i>.
-</div>
+:::
 
 ------------------------------------------------------------------------
 
 ### Bayesian Linear Regression...
 
-<div style="margin-bottom: 50px;"></div>
+::: {style="margin-bottom: 50px;"}
+:::
 
-<div class="fragment">
-
-**Maximum A Posteriori (MAP)** estimator maximizes the posterior $P(\beta|y)$ :
-$$ \begin{align*}
+::: fragment
+**Maximum A Posteriori (MAP)** estimator maximizes the posterior $P(\beta|y)$ : $$ \begin{align*}
 \widehat{\beta}_{MAP} &= \arg\max_{\beta} P(\beta|y) \\
 &=\arg\max_{\beta} \frac{P(y|\beta)P(\beta)}{P(y)} \\
 &=\arg\max_{\beta} P(y|\beta)P(\beta) \\
 &=\arg\max_{\beta} \big[ \log P(y|\beta)+\log P(\beta)]\big]
 \end{align*}$$
+:::
 
-</div>
+::: {style="margin-bottom: 50px;"}
+:::
 
-<div style="margin-bottom: 50px;"></div>
-
-<div class="fragment">
-
-Now to specify a **likelihood**, i.e. $P(y|\beta)$,  and **prior**, i.e. $P(\beta)$.
-
-</div>
+::: fragment
+Now to specify a **likelihood**, i.e. $P(y|\beta)$, and **prior**, i.e. $P(\beta)$.
+:::
 
 ------------------------------------------------------------------------
 
 ### Bayesian ridge regression
 
-<div style="margin-bottom: 50px;"></div>
+::: {style="margin-bottom: 50px;"}
+:::
 
-**Gaussian likelihood:**  $\quad y \sim N(X\beta, \sigma^2)$
-$$ \begin{align*}
+**Gaussian likelihood:** $\quad y \sim N(X\beta, \sigma^2)$ $$ \begin{align*}
 P(y|\beta) &= \frac{1}{(2\pi\sigma^2)^{n/2}} \exp\left(-\frac{1}{2\sigma^2} \|y - X\beta\|_2^2\right) \\
 \boldsymbol{\log P(y|\beta)}&=-\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2} \|y - X\beta\|_2^2 \\
 &\propto -\frac{1}{2\sigma^2} \color{red}{\|y - X\beta\|_2^2}\\
 \end{align*}$$
 
-<div style="margin-bottom: 50px;"></div>
+::: {style="margin-bottom: 50px;"}
+:::
 
 **Gaussian prior:** $\quad \beta_j \sim N(0, \tau^2)\quad j=1,...,p\quad$ *(same for all!)*
 
@@ -394,18 +386,17 @@ $$\begin{align*}
 \boldsymbol{\log P(\beta)} \propto -\frac{1}{2\tau^2} \color{blue}{\|\beta\|_2^2}
 \end{align*}$$
 
-
 ------------------------------------------------------------------------
 
-<div style="margin-bottom: 50px;"></div>
+::: {style="margin-bottom: 50px;"}
+:::
 
-**MAP for Ridge:**
-$$ \widehat{\beta}_{MAP} = \arg\max_{\beta} -\frac{1}{2\sigma^2} \|y - X\beta\|_2^2 - \frac{1}{2\tau^2} \|\beta\|_2^2 $$
-<div style="margin-bottom: 50px;"></div>
+**MAP for Ridge:** $$ \widehat{\beta}_{MAP} = \arg\max_{\beta} -\frac{1}{2\sigma^2} \|y - X\beta\|_2^2 - \frac{1}{2\tau^2} \|\beta\|_2^2 $$
 
-**Equivalence to Ridge:**
-$$ \widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \frac{\sigma^2}{\tau^2} \color{blue}{\|\beta\|_2^2} $$
-where $\lambda = \frac{\sigma^2}{\tau^2}$.
+::: {style="margin-bottom: 50px;"}
+:::
+
+**Equivalence to Ridge:** $$ \widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \frac{\sigma^2}{\tau^2} \color{blue}{\|\beta\|_2^2} $$ where $\lambda = \frac{\sigma^2}{\tau^2}$.
 
 ------------------------------------------------------------------------
 
@@ -413,8 +404,7 @@ where $\lambda = \frac{\sigma^2}{\tau^2}$.
 
 Use priors with very stronger shrinkage near zero for variable selection.
 
-<div class="fragment">
- 
+::: fragment
 **Bayesian Lasso**
 
 Equivalence when using the Laplace prior:
@@ -422,10 +412,9 @@ Equivalence when using the Laplace prior:
 $$
 \beta_j \sim \frac{1}{2b}\exp\left(-\frac{|\beta_j|}{b}\right)
 $$
-</div>
+:::
 
-<div class="fragment">
-
+::: fragment
 **Horseshoe Prior**
 
 $$
@@ -434,16 +423,13 @@ $$
 \lambda_i \sim \text{Half-Cauchy}(0,1)
 $$
 
-- **Global shrinkage:** $\tau$  
-- **Local shrinkage:** $\lambda_i$
+-   **Global shrinkage:** $\tau$\
+-   **Local shrinkage:** $\lambda_i$
+:::
 
-</div>
-
-<div class="fragment">
-
+::: fragment
 Large coefficients can **escape shrinkage** to zero AND shrink less than Lasso.
-
-</div>
+:::
 
 ------------------------------------------------------------------------
 
@@ -516,12 +502,10 @@ ggplot(priors_df, aes(x=beta_j)) +
 
 ### Horseshoe Shrinkage Factor
 
-Reparameterize the horseshoe prior using the **shrinkage factor** $\kappa_i = \frac{1}{1+\tau^2\lambda_i^2}$.
-$$
+Reparameterize the horseshoe prior using the **shrinkage factor** $\kappa_i = \frac{1}{1+\tau^2\lambda_i^2}$. $$
 \kappa_i \sim \text{Beta}(1/2,1/2)
-$$
-  - $\kappa_i \approx 1$ → strong shrinkage ($\beta_i \approx 0$)  
-  - $\kappa_i \approx 0$ → little shrinkage (signal preserved)
+$$ - $\kappa_i \approx 1$ → strong shrinkage ($\beta_i \approx 0$)\
+- $\kappa_i \approx 0$ → little shrinkage (signal preserved)
 
 ```{r}
 #| fig.width: 12
