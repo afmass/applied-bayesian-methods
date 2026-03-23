@@ -339,6 +339,16 @@ $$
 
 ------------------------------------------------------------------------
 
+## Geometric intuition
+
+![](images/ridge_lasso_esl.png){fig-align="center" width="80%"}
+
+<div style="position:absolute; bottom:-30px; left:0px; font-size:0.6em; color:gray;">
+Adapted from Hastie, Tibshirani, and Friedman (2009), <i>The Elements of Statistical Learning</i>.
+</div>
+
+------------------------------------------------------------------------
+
 ### Bayesian Linear Regression...
 
 <div style="margin-bottom: 50px;"></div>
@@ -431,7 +441,7 @@ $$
 
 <div class="fragment">
 
-Large coefficients can **escape shrinkage** to zero.
+Large coefficients can **escape shrinkage** to zero AND shrink less than Lasso.
 
 </div>
 
