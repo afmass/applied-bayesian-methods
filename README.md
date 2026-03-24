@@ -30,21 +30,21 @@ By the end of this course, participants will be able to:
 - Fitting and interpreting Bayesian mixed effect models
 
 **Software:** R (`rstanarm`, `brms`)  
-**Instructor:** [Alexander MASSEY] → [`/day1`](./day1)
+**Instructor:** Alexander MASSEY → [`/day1`](./Day1)
 
 ### Day 2 — Space and Time in the Bayesian Framework
 - Space and time modelling concepts and approaches in the Bayesian framework
 - Fitting and evaluating models with explicit space and/or time components
 
 **Software:** R (INLA)  
-**Instructor:** [Lionel HERTZOG] → [`/day2`](./day2)
+**Instructor:** Lionel HERTZOG → [`/day2`](./Day2)
 
 ### Day 3 — Ensemble Modelling and Bayesian Model Averaging
 - Introduction to ensemble modelling methods with a focus on Bayesian Model Averaging
 - Applying and evaluating Bayesian Model Averaging on real-world models
 
 **Software:** Python  
-**Instructor:** [Nikola Besik] → [`/day3`](./day3)
+**Instructor:** Nikola BESIK → [`/day3`](./Day3)
 
 ## Prerequisites
 
