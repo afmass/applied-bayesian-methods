@@ -1,0 +1,485 @@
+---
+title: "Bonus Exercise: Dynamic CAPM with INLA"
+subtitle: "Time-Varying Coefficients in a Bayesian Linear Model"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+library(KFAS)
+library(INLA)
+library(ggplot2)
+library(quantmod)
+library(dplyr)
+```
+
+------------------------------------------------------------------------
+
+::: {.callout-note icon="false"}
+## Overview
+
+In standard CAPM, a stock's return is modelled as:
+
+$$r_{\text{asset}}(t) = \alpha + \beta \cdot r_{\text{market}}(t) + \varepsilon(t)$$
+
+where $\alpha$ (Jensen's alpha) measures excess return and $\beta$ measures market sensitivity. Fitting a classical linear model has two main problems:
+
+1.  Coefficients would be **fixed** over time (not realistic).
+2.  Ignoring serial correlation yields unbiased estimates but the CIs would be way too narrow.
+
+In this exercise, you will address both these issues by fitting a **dynamic CAPM** in which $\alpha(t)$ and $\beta(t)$ evolve over time as latent AR(1) processes. In a preview of tomorrow's lessons, you will use **INLA**, which is a remarkably fast and powerful software based on Laplace Approximations instead of MCMC. It is definitely a tool to keep on your radar.
+:::
+
+------------------------------------------------------------------------
+
+## Background: Why Time-Varying?
+
+Financial markets are non-stationary. A stock's relationship with the broader market changes due to:
+
+-   Shifts in business model or sector composition
+-   Macroeconomic regime changes (e.g. COVID, wars, criminal bankers)
+-   Changes in leverage or capital structure
+
+A static beta estimated over 10 years may be meaningless for any particular sub-period. The **state space** approach lets the data tell us when and how these parameters shift.
+
+### The Model
+
+$$r_{\text{asset}}(t) = \alpha(t) + \beta(t) \cdot r_{\text{market}}(t) + \varepsilon(t), \quad \varepsilon(t) \sim \mathcal{N}(0, \sigma^2_\varepsilon)$$
+
+with latent processes:
+
+$$\alpha(t) \mid \alpha(t-1) \sim \mathcal{N}(\rho_\alpha \cdot \alpha(t-1),\ \sigma^2_\alpha)$$ $$\beta(t) \mid \beta(t-1) \sim \mathcal{N}(\rho_\beta \cdot \beta(t-1),\ \sigma^2_\beta)$$
+
+When $\rho = 1$ this is a **random walk**; when $|\rho| < 1$ it is a mean-reverting **AR(1)**. INLA estimates all hyperparameters ($\rho$, $\sigma^2_\alpha$, $\sigma^2_\beta$, $\sigma^2_\varepsilon$) jointly with the latent states.
+
+### Why INLA and not brms?
+
+| Feature         | INLA                      | brms / Stan           |
+|-----------------|---------------------------|-----------------------|
+| Speed           | Seconds (Laplace approx.) | Minutes (MCMC)        |
+| Reproducibility | Deterministic             | Random seed dependent |
+| Scalability     | Sparse precision matrices | Dense covariance      |
+| Flexibility     | Latent Gaussian models    | Arbitrary posteriors  |
+
+INLA is ideal here because the model is a **latent Gaussian model** — the latent states are Gaussian conditional on hyperparameters, which is exactly the class INLA is designed for.
+
+------------------------------------------------------------------------
+
+## Data
+
+We use daily log returns from Yahoo Finance. Log returns are approximately stationary (unlike prices), supporting the AR(1) assumption on the latent states.
+
+The **market benchmark** is **VT** (Vanguard Total World ETF), but another common choice would be the S&P 500 . KO is Coca-Cola. GLD is an ETF that tracks the price of gold. LVMHF is a European luxury stock with moderate market exposure. NVDA is a high-growth tech stock whose market cap is currently 4% of the total world market cap. VGK is a broad European ETF. VXUS tracks non-US international equities. Add your own ticker if you like but must trade on the NYSE.
+
+```{r}
+#| label: download-data
+#| cache: true
+
+library(KFAS)
+library(INLA)
+library(ggplot2)
+library(quantmod)
+
+tickers <- c("KO", "MCD", "LVMHF", "VGK", "GLD", "NVDA", "VT", "VXUS", "^GSPC")
+
+getSymbols(tickers, src = "yahoo", from = "2010-01-01", to = Sys.Date())
+
+stock_returns <- merge(
+  dailyReturn(Ad(KO),    type = "log"),
+  dailyReturn(Ad(MCD),   type = "log"),
+  dailyReturn(Ad(LVMHF), type = "log"),
+  dailyReturn(Ad(VGK),   type = "log"),
+  dailyReturn(Ad(GLD),   type = "log"),
+  dailyReturn(Ad(NVDA),  type = "log"),
+  dailyReturn(Ad(VT),    type = "log"),
+  dailyReturn(Ad(VXUS),  type = "log"),
+  dailyReturn(Ad(GSPC),  type = "log")
+)
+colnames(stock_returns) <- c("COKE", "MCD", "LVMHF", "VGK", "GLD", "NVDA", "VT", "VXUS", "SP500")
+
+head(stock_returns)
+```
+
+------------------------------------------------------------------------
+
+## Model Fitting Functions
+
+The helper functions below fit the dynamic CAPM and extract posterior summaries. You will be asked to modify them in the exercises below.
+
+```{r}
+#| label: fit-functions
+
+# Fit the dynamic CAPM for one asset against a chosen market benchmark.
+# model_alpha and model_beta control the latent process structure:
+#   "ar1"  — mean-reverting AR(1) with estimated rho and precision
+#   "rw1"  — random walk (integrated process, non-stationary)
+#   "iid"  — independent draws (no temporal dependence)
+fit_dynamic_capm <- function(data,
+                             target_asset,
+                             benchmark,
+                             model_alpha = "ar1",
+                             model_beta  = "ar1") {
+  df            <- as.data.frame(data)
+  df$y          <- df[[target_asset]]
+  df$benchmark  <- df[[benchmark]]
+  df$time_alpha <- 1:nrow(df)
+  df$time_beta  <- 1:nrow(df)
+
+  fit <- inla(
+    y ~ -1 +
+      f(time_alpha, model = model_alpha) +
+      f(time_beta,  benchmark, model = model_beta),
+    family = "gaussian",
+    data   = df
+  )
+
+  list(fit = fit, target_asset = target_asset, dates = index(data))
+}
+
+# Extract posterior means and 95% credible intervals into a tidy data frame.
+extract_capm <- function(model_fit) {
+  ra <- model_fit$fit$summary.random$time_alpha
+  rb <- model_fit$fit$summary.random$time_beta
+  data.frame(
+    time        = model_fit$dates,
+    ticker      = model_fit$target_asset,
+    alpha_mean  = ra$mean,
+    alpha_lower = ra$`0.025quant`,
+    alpha_upper = ra$`0.975quant`,
+    beta_mean   = rb$mean,
+    beta_lower  = rb$`0.025quant`,
+    beta_upper  = rb$`0.975quant`
+  )
+}
+```
+
+```{r}
+#| label: plot-function
+
+# Plotting wrapper: single asset or side-by-side comparison.
+# param = "beta" or "alpha"
+# n_days controls how many trading days to show (252 ≈ 1 year)
+plot_capm <- function(df1, df2 = NULL,
+                      param  = c("beta", "alpha"),
+                      n_days = 252 * 10) {
+  param <- match.arg(param)
+
+  if (param == "alpha") {
+    mean_col    <- "alpha_mean"
+    lower_col   <- "alpha_lower"
+    upper_col   <- "alpha_upper"
+    hline       <- 0
+    hline_col   <- "red"
+    ylab        <- expression(alpha(t))
+    title_param <- "Alpha"
+  } else {
+    mean_col    <- "beta_mean"
+    lower_col   <- "beta_lower"
+    upper_col   <- "beta_upper"
+    hline       <- 1
+    hline_col   <- "blue"
+    ylab        <- expression(beta(t))
+    title_param <- "Beta"
+  }
+
+  if (is.null(df2)) {
+    df       <- tail(df1, n_days)
+    fill_col <- if (param == "alpha") "pink" else "lightblue"
+
+    ggplot(df, aes(x = time)) +
+      geom_ribbon(aes(ymin = .data[[lower_col]], ymax = .data[[upper_col]]),
+                  fill = fill_col, alpha = 0.4) +
+      geom_line(aes(y = .data[[mean_col]]), color = "black", linewidth = 0.9) +
+      geom_hline(yintercept = hline, color = hline_col, linetype = "dashed") +
+      labs(title    = paste("Time-Varying", title_param, "—", unique(df$ticker)),
+           subtitle = "Posterior mean with 95% credible interval",
+           x = NULL, y = ylab) +
+      theme_minimal(base_size = 13)
+
+  } else {
+    combined <- rbind(tail(df1, n_days), tail(df2, n_days))
+    tickers  <- unique(combined$ticker)
+    colours  <- c("steelblue", "goldenrod")
+    names(colours) <- tickers
+
+    ggplot(combined, aes(x = time, fill = ticker, color = ticker)) +
+      geom_ribbon(aes(ymin = .data[[lower_col]], ymax = .data[[upper_col]]),
+                  alpha = 0.25, color = NA) +
+      geom_line(aes(y = .data[[mean_col]]), linewidth = 0.8) +
+      geom_hline(yintercept = hline, color = hline_col, linetype = "dashed") +
+      scale_fill_manual(values  = colours) +
+      scale_color_manual(values = colours) +
+      labs(title    = paste("Time-Varying", title_param, "—",
+                            tickers[1], "vs", tickers[2]),
+           subtitle = "Posterior mean with 95% credible interval | Market: VT",
+           x = NULL, y = ylab,
+           fill = NULL, color = NULL) +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "top")
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+## Fitting the Models
+
+We fit the dynamic CAPM for several assets. This may take a minute or two per asset.
+
+```{r}
+#| label: fit-models
+#| cache: true
+
+df_nvda  <- fit_dynamic_capm(stock_returns, "NVDA",  "VT") |> extract_capm()
+df_gld   <- fit_dynamic_capm(stock_returns, "GLD",   "VT") |> extract_capm()
+df_mcd   <- fit_dynamic_capm(stock_returns, "MCD",   "VT") |> extract_capm()
+df_coke  <- fit_dynamic_capm(stock_returns, "COKE",  "VT") |> extract_capm()
+df_vgk   <- fit_dynamic_capm(stock_returns, "VGK",   "VT") |> extract_capm()
+df_sp500 <- fit_dynamic_capm(stock_returns, "SP500", "VT") |> extract_capm()
+df_lvmh  <- fit_dynamic_capm(stock_returns, "LVMHF", "VT") |> extract_capm()
+```
+
+------------------------------------------------------------------------
+
+## Example Plots
+
+```{r}
+#| label: plot-nvda-gld
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "NVDA vs GLD: time-varying beta. NVDA is a high-growth tech stock; GLD is a commodity hedge. Why is beta=0 desireable for a hedge?  What does beta>1 indicate?"
+
+plot_capm(df_nvda, df_gld, param = "beta", n_days = 252 * 15)
+```
+
+```{r}
+#| label: plot-nvda-gld-alpha
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "NVDA vs GLD: time-varying alpha."
+
+plot_capm(df_nvda, df_gld, param = "alpha", n_days = 252 * 15)
+```
+
+```{r}
+#| label: plot-coke-mcd
+#| fig-width: 10
+#| fig-height: 4
+#| fig-cap: "Coca-Cola vs McDonald's: two defensive consumer staples. Why do their betas move together?"
+
+plot_capm(df_coke, df_mcd, param = "beta", n_days = 252 * 15)
+```
+
+------------------------------------------------------------------------
+
+## Exercises
+
+### Exercise 1 — Interpret the Beta Trajectories
+
+Look at the NVDA vs GLD beta plot above.
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+Beta measures the sensitivity of the asset's return to the market. A beta \> 1 means the asset moves more than the market; beta \< 1 means it moves less; beta \< 0 means it tends to move against the market.
+:::
+
+**Q1.1.** During the 2020 COVID crash (early 2020), what happens to NVDA's beta? What does this mean for an investor using NVDA as a hedge?
+
+**Q1.2.** Does GLD's beta ever go negative? If so, during which periods, and what is the economic interpretation?
+
+**Q1.3.** Look at the credible intervals. Are they wider for NVDA or GLD? What drives the width of a credible interval in this model?
+
+------------------------------------------------------------------------
+
+### Exercise 2 — iid vs AR(1) Structure
+
+The `fit_dynamic_capm()` function accepts a `model_alpha` and `model_beta` argument. By default both are `"ar1"`. Try changing one or both to `"iid"`.
+
+```{r}
+#| label: ex2-template
+#| eval: false
+
+# Fit NVDA with iid structure on beta (no temporal smoothing)
+df_nvda_iid <- fit_dynamic_capm(
+  stock_returns, "NVDA", "VT",
+  model_beta = "iid"   # <-- change this
+) |> extract_capm()
+
+# Compare the two
+plot_capm(df_nvda_iid, param = "beta", n_days = 252 * 10)
+plot_capm(df_nvda,     param = "beta", n_days = 252 * 10)
+```
+
+**Q2.1.** How does the posterior mean of $\beta(t)$ differ between the `iid` and `ar1` specifications? Which is smoother, and why?
+
+**Q2.2.** How do the credible intervals compare? Under `iid`, each time point is estimated independently with no borrowing of strength from neighbours. What effect does this have on uncertainty?
+
+**Q2.3.** Which model do you think is more appropriate for financial returns data, and why? Is there a risk of overfitting with `iid`?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+Under `ar1`, the precision matrix for the latent states is **tridiagonal** — each state is conditionally dependent only on its neighbours. Under `iid`, the precision matrix is **diagonal** — states are conditionally independent. The AR(1) structure introduces temporal smoothing as a form of regularisation.
+:::
+
+------------------------------------------------------------------------
+
+### Exercise 3 — Random Walk vs AR(1)
+
+Try `model_beta = "rw1"`. A random walk is an AR(1) with $\rho = 1$ — it has no mean reversion and is non-stationary.
+
+```{r}
+#| label: ex3-template
+#| eval: false
+
+df_nvda_rw <- fit_dynamic_capm(
+  stock_returns, "NVDA", "VT",
+  model_beta = "rw1"
+) |> extract_capm()
+
+plot_capm(df_nvda_rw, param = "beta", n_days = 252 * 10)
+```
+
+**Q3.1.** Does the random walk produce more or less smooth estimates than AR(1)?
+
+**Q3.2.** A random walk has no long-run mean. What does this imply about the long-run behaviour of $\beta(t)$ under this model? Is this economically reasonable?
+
+**Q3.3.** Look at the end of the time series. Does the random walk or AR(1) produce wider credible intervals near the boundary? Why might this be?
+
+------------------------------------------------------------------------
+
+### Exercise 4 — Choosing the Benchmark
+
+So far we have used VT (Total World) as the market. Try replacing it with SP500 (the domestic US index) for NVDA.
+
+```{r}
+#| label: ex4-template
+#| eval: false
+
+df_nvda_sp <- fit_dynamic_capm(
+  stock_returns, "NVDA", "SP500"
+) |> extract_capm()
+
+# Compare VT vs SP500 as benchmark
+plot_capm(df_nvda,    param = "beta", n_days = 252 * 10)
+plot_capm(df_nvda_sp, param = "beta", n_days = 252 * 10)
+```
+
+**Q4.1.** Does NVDA's beta change materially when you switch from VT to SP500? What does this tell you about the correlation between VT and SP500?
+
+**Q4.2.** For a European stock like LVMHF, would you expect a larger difference between VT and SP500 betas? Fit the model and check.
+
+```{r}
+#| label: ex4-lvmh
+#| eval: false
+
+df_lvmh_sp <- fit_dynamic_capm(
+  stock_returns, "LVMHF", "SP500"
+) |> extract_capm()
+
+plot_capm(df_lvmh,    param = "beta", n_days = 252 * 10)
+plot_capm(df_lvmh_sp, param = "beta", n_days = 252 * 10)
+```
+
+------------------------------------------------------------------------
+
+### Exercise 5 — Extracting Hyperparameters
+
+INLA estimates the hyperparameters ($\rho$, precisions) jointly with the latent states. Access them as follows:
+
+```{r}
+#| label: ex5-template
+#| eval: false
+
+# Refit NVDA and keep the full INLA object
+nvda_fit <- fit_dynamic_capm(stock_returns, "NVDA", "VT")
+
+# Marginal posteriors for all hyperparameters
+nvda_fit$fit$summary.hyperpar
+```
+
+**Q5.1.** Find the posterior mean of the AR(1) coefficient $\rho$ for $\beta(t)$. Is it close to 1 (random walk) or closer to 0 (weak persistence)?
+
+**Q5.2.** Compare the precision of the observation noise ($\sigma^2_\varepsilon$) to the precision of the latent beta process ($\sigma^2_\beta$). Which is larger, and what does this imply about the signal-to-noise ratio?
+
+**Q5.3.** Repeat for GLD. Is GLD's beta process more or less persistent than NVDA's? Does this match your economic intuition?
+
+------------------------------------------------------------------------
+
+### Exercise 6 — Extension: Adding a Second Factor *(Challenging)*
+
+The standard CAPM uses a single market factor. The **Fama-French** model adds size (SMB) and value (HML) factors. We can approximate a two-factor model by adding VXUS (international equity) as a second covariate.
+
+```{r}
+#| label: ex6-template
+#| eval: false
+
+# Two-factor model: VT (world market) + VXUS (international tilt)
+fit_two_factor <- function(data, target_asset) {
+  df              <- as.data.frame(data)
+  df$y            <- df[[target_asset]]
+  df$market       <- df[["VT"]]
+  df$intl         <- df[["VXUS"]]
+  df$time_alpha   <- 1:nrow(df)
+  df$time_beta1   <- 1:nrow(df)
+  df$time_beta2   <- 1:nrow(df)
+
+  inla(
+    y ~ -1 +
+      f(time_alpha, model = "ar1") +
+      f(time_beta1, market, model = "ar1") +
+      f(time_beta2, intl,   model = "ar1"),
+    family = "gaussian",
+    data   = df
+  )
+}
+
+nvda_2f <- fit_two_factor(stock_returns, "NVDA")
+nvda_2f$summary.random$time_beta2 |> head()
+```
+
+**Q6.1.** Does adding VXUS as a second factor substantially change the estimated $\beta_{\text{VT}}(t)$ for NVDA?
+
+**Q6.2.** What is the posterior mean of $\beta_{\text{VXUS}}(t)$ for NVDA? Is it credibly different from zero?
+
+**Q6.3.** Why might this two-factor extension be problematic for GLD?
+
+------------------------------------------------------------------------
+
+## Summary
+
+::: {.callout-important icon="false"}
+## Key Takeaways
+
+-   The dynamic CAPM relaxes the fixed-parameter assumption of classical CAPM by placing AR(1) priors on the latent $\alpha(t)$ and $\beta(t)$ processes.
+-   INLA provides fast, deterministic posterior inference via the Laplace approximation — ideal for large time series with latent Gaussian structure.
+-   The choice of latent process structure (`ar1`, `rw1`, `iid`) acts as a **prior on the smoothness** of the parameter trajectory. This is a modelling choice with substantive economic implications.
+-   Credible intervals quantify uncertainty about where the parameter is at each point in time — not just whether it differs from a fixed value.
+-   The choice of benchmark matters: CAPM beta is always relative to a specific market portfolio.
+:::
+
+------------------------------------------------------------------------
+
+*Applied Bayesian Methods — Bonus Exercise*
