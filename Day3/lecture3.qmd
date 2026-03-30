@@ -1,0 +1,554 @@
+---
+title: "ABM Day 3"
+subtitle: "Lecture 3: Spatial structure"
+author: Lionel Hertzog
+format:
+  revealjs:
+    theme: white
+    css: assets/custom.scss
+    slide-number: true
+    chalkboard: false
+    incremental: true
+    code-overflow: wrap
+    fontsize: 2em
+    title-slide-attributes:
+      data-background-image: ""
+    katex: TRUE
+include-after-body: assets/logo-inject.html
+execute:
+  warning: false
+  message: false
+---
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## load libraries
+library(tidyverse)
+library(inlabru)
+library(rstanarm)
+library(sf)
+library(patchwork)
+library(INLA)
+library(fmesher)
+```
+
+## Where we are
+
+::: incremental
+-   Introduction to Latent Gaussian Models and inlabru (this morning)
+-   Adding temporal structure in models (this morning)
+-   Adding spatial structure in models (now)
+-   Spatio-temporal structure (to end this day)
+:::
+
+## What we saw: Latent Gaussian Models
+
+
+-  Observation parts
+-  Latent fields
+-  Hyperpameters prior definition
+
+$$
+\eta_i = \underbrace{\beta_0 + \beta_1 * X_i}_{\substack{\text{fixed} \\ \text{effects}}} + \underbrace{f_1(s_i)}_{\substack{\text{spatial} \\ \text{effect}}} + \underbrace{f_2(t_i)}_{\substack{\text{temporal} \\ \text{effect}}} + \underbrace{f_3(group_i)}_{\substack{\text{random} \\ \text{intercept}}} + ...
+$$
+
+## Different shades of spatial data
+
+Spatial information can be encoded in various ways, for instance:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+## first example unemployment rate in french department
+uu <- read.csv2("unemployment_dep.csv", dec = ".")
+uus <- select(uu, Code, Libellé, T3_1999)
+
+## add shapes
+dep <- st_read("~/LIF/IFN_stuff/data/geodata/gadm41_FRA.gpkg",
+               layer = "ADM_ADM_2", quiet = TRUE)
+
+uus <- inner_join(uus, select(dep, CC_2, geom), by = c("Code" = "CC_2"))
+names(uus)[3] <- "unemployment"
+
+
+g1 <- ggplot() +
+  geom_sf(data = uus, aes(fill = unemployment, geometry = geom)) +
+  scale_fill_continuous(type = "viridis",
+                        name = "Rate") +
+  theme_void() +
+  labs(title = "Unemployment rate in 1999")
+
+## second example species richness in NFI plots
+conn <- inventR::connect_db()
+g3f <- tbl(conn, dbplyr::in_schema("inv_exp_nm", "g3flore"))
+e1c <- tbl(conn, dbplyr::in_schema("inv_exp_nm", "e1coord"))
+e2p <- tbl(conn, dbplyr::in_schema("inv_exp_nm", "e2point"))
+
+g3f %>%
+  count(npp) %>%
+  inner_join(e1c, by = "npp") %>%
+  inner_join(e2p, by = "npp") %>%
+  filter(greco == "D") %>%
+  select(npp, xl, yl, zp, n) %>%
+  collect() -> fdat
+
+fdat <- st_as_sf(fdat, coords = 2:3, crs = 27572)
+fdat$n <- as.numeric(fdat$n)
+
+g2 <- ggplot() +
+  geom_sf(data = fdat, aes(color = log(n)), size = 0.25) +
+  scale_color_continuous(type = "viridis",
+                         name = "Species\nrichness") +
+  theme_void() +
+  labs(title = "Plant diversity in the Vosges")
+  
+wrap_plots(g1, g2, ncol = 2)
+```
+
+Do you see other ways?
+
+## Non-spatial models fitted to spatial data
+
+We can fit non-spatially aware models to the unemployment departmental data like:
+
+$$
+unemployment_i \sim \mathcal{N}(\eta_i, \sigma_{\epsilon}²)
+$$
+$$
+\eta_i = \beta_0 + f(department_i)
+$$
+$$
+f(department_i) \sim \mathcal{N}(0, \sigma_{dep}²)
+$$
+And in R:
+
+```{r warning=FALSE, message=FALSE, echo=TRUE}
+m_stan <- stan_lmer(unemployment ~ 1 + (1 | Code), data = uus,
+                    refresh = 0)
+```
+
+## Non-spatial models
+
+We can plot the model predictions:
+
+```{r echo=FALSE}
+uus$pred <- ranef(m_stan)$Code[,1] + fixef(m_stan)
+
+g3 <- ggplot() +
+   geom_sf(data = uus, aes(fill = pred, geometry = geom)) +
+   scale_fill_continuous(type = "viridis",
+                         name = "Rate") +
+   theme_void() +
+   labs(title = "Predicted unemployment rate",
+        subtitle = "Mixed-effect model") 
+
+wrap_plots(g1, g3, ncol = 2)
+```
+
+What do you think?
+
+## Spatial models for areal data
+
+Various model structure exists to consider the spatial structure from **discrete** spatial units.
+
+All are based on an adjacency matrix between the units - whom is neighbors with whom:
+
+```{r message=FALSE, warning=FALSE}
+neb <- spdep::poly2nb(dep)
+plot(neb, st_as_sfc(dep))
+```
+
+## Besag: the founding step
+
+A first model on areal data is the Besag model:
+
+$$
+unemployment_i \sim \mathcal{N}(\eta_i, \sigma_{\epsilon}²)
+$$
+
+
+$$
+\eta_i = \beta_0 + f(department_i)
+$$
+
+$$
+f(department_i) = f_i | f_{-i} \sim \mathcal{N}(\frac{1}{n_i}\sum_{j \sim i} f_j, \frac{\sigma_{u}²}{n_i})
+$$
+
+where $n_i$ is the number of neighbours of area $i$ and $j \sim i$ means $j$ is a neighbour of $i$.
+
+In plain language: the value of area $i$ is **the average of its neighbours**, with uncertainty that **decreases** as it has more neighbours.
+
+## Besag in INLA(bru)
+
+In inlabru such model can be fitted as follow:
+
+```{r echo=TRUE, eval=FALSE}
+m_besag <- bru(unemployment ~ Intercept(1) + besag_field(dep, model = "besag", graph = W))
+```
+
+Key properties:
+
+-  Strong spatial pooling: the value of a spatial unit is pulled towards the one of its neighbours
+-  One hyperparameter: $\sigma_u²$ that controls the variation between the spatial units.
+
+## BYM: going a step further
+
+The Besag-York-Mollié model adds an i.i.d. component on top of the Besag model:
+
+$$
+f(department_i) = \underbrace{u_i}_{\substack{\text{spatially} \\ \text{structured}}} + \underbrace{v_i}_{\text{unstructured}}
+$$
+
+$$
+u_i = BESAG; v_i \sim \mathcal{N}(0, \sigma_v²)
+$$
+
+This separates two sources of variations between the spatial units:
+
+-  A variation structured by the neighborhood structure of the units - spatially smooth
+-  A variation that is unit-specific - pure overdispersion
+
+It is similar to a BESAG + random-intercept setting.
+
+## BYM in INLA(bru)
+
+In inlabru we can fit such model with the following:
+
+```{r echo=TRUE, eval=FALSE}
+m_bym <- bru(unemployment ~ Intercept(1) + besag_field(dep, model = "bym", graph = W))
+```
+
+It has two hyperparameters:
+
+-  $\sigma_u$: the amount of structured spatial variation
+-  $\sigma_v$: the amount of spatial overdispersion
+
+## An alternative BYM2
+
+In practice it is recommended to work with a reparametrization of the BYM model:
+
+$$
+f(department_i) = \sigma (\sqrt{1-\rho}v_i^* + \sqrt{\rho}u_i^*)
+$$
+
+With $u_i^*$ a scaled BESAG and $v_i^* \sim \mathcal{N}(0, 1)$.
+
+This model has two hyperparameters:
+
+-   $\rho$: the share of the spatial variation that is structured by the neighborhood between the units, 0 pure i.i.d and 1 purely BESAG model.
+-   $\sigma$: the amount of variation between the spatial units
+
+## Comparison of options so far
+
+| Model | Components | Key assumptions | Hyperparameters | Use when |
+|-------|------------|-----------------|-----------------|----------|
+| BESAG/ICAR| Spatial only | Smooth spatial variation | $\sigma²$ | Prior on smoothness |
+| BYM | Spatial + iid | Spatial + overdispersion | $\sigma_u²$, $\sigma_v²$ | Overdispersion likely |
+| BYM2 | Spatial + iid | Same as BYM with reparametrization | $\sigma²$, $\rho$ | reccommended option |
+
+## Try out of BYM2
+
+```{r echo=TRUE}
+W <- spdep::nb2mat(neb, style = "B")
+uus$id <- 1:nrow(uus)
+
+m_bym2 <- bru(unemployment ~ Intercept(1) + bym_field(id, model = "bym2", graph = W),
+              data = uus, control.family = list(hyper = list(prec = list(fixed = TRUE))))
+```
+
+I drop the estimation of the residual deviation from the model to avoid conflict between $\sigma_{\epsilon}²$ and $\sigma$.
+
+```{r}
+summary(m_bym2)
+```
+
+## Try out of BYM2
+
+```{r echo=FALSE}
+pred <- predict(m_bym2, uus, ~ Intercept + bym_field)
+
+g4 <- ggplot() +
+   geom_sf(data = pred, aes(fill = mean, geometry = geom)) +
+   scale_fill_continuous(type = "viridis",
+                         name = "Rate") +
+   theme_void() +
+   labs(title = "Predicted unemployment rate",
+        subtitle = "BYM2 model") 
+
+wrap_plots(g1, g4, ncol = 2)
+```
+
+Evidence of overfit ...
+
+## From areal to continuous spatial fields
+
+
+```{r}
+g2
+```
+
+[In essence the spatial structures that we saw so far are equivalent to the hierarchical structure, they only consider discrete units, while with continuous spatial fields we can estimate a value at any point in space: $f(s_i)$]{style="font-size: 0.75em;"}
+
+## About Gaussian Process
+
+To estimate a continuous spatial field models often rely on Gaussian Process defined as:
+
+$$
+f(s_i) \sim \mathcal{N}(0, K(\theta, s_i, s_{i'}))
+$$
+With $K$ a suitable covariance function with parameter(s) $\theta$.
+
+## About covariance function
+
+Assume that we want to estimate a spatial field on 10 observed locations. The covariance matrix is a 10x10 matrix:
+
+
+\begin{bmatrix}
+\sigma²_{1} & \sigma_1\sigma_2 & \cdots & \sigma_1\sigma_{10} \\
+\sigma_2\sigma_1 & \sigma_2² & \cdots & \sigma_2\sigma_{10} \\
+\vdots & \vdots & \ddots & \vdots \\
+\sigma_{10}\sigma_1 & \sigma_{10}\sigma_2 & \cdots & \sigma_{10}²
+\end{bmatrix}
+
+
+
+The covariance function should fill in this matrix given some parameters and the distance between the locations:
+
+$$
+Cov(s_1, s_2) = K(\theta, d(s_1, s_2))
+$$
+
+## The Matern covariance function
+
+A covariance function that is powerful to use for estimating spatial fields is the *Matern* function, it has two parameters:
+
+-  $\rho$: the range parameter, how far the spatial correlation reach, large values means a fast decay of the correlation with the distance
+-  $\sigma$: the amount of variation, large values indicate strongly varying spatial fields.
+
+## Some matern plots - sigma
+
+```{r}
+build_matern <- function(n = 60,
+                         theta1 = log(0.5),
+                         theta2 = log(1.5)){
+  # ── 2. Matérn Spatial Field ───────────────────────────────────────────────────
+# Build a regular grid
+grid_size <- n
+coords <- expand.grid(
+  x = seq(0, 1, length.out = grid_size),
+  y = seq(0, 1, length.out = grid_size)
+)
+# Create SPDE object on the grid points as mesh
+mesh <- inla.mesh.2d(
+  loc      = coords,
+  max.edge = c(0.08, 0.2),
+  cutoff   = 0.02
+)
+# Build SPDE with Matérn covariance (smoothness nu = 1, i.e. alpha = 2)
+spde <- inla.spde2.matern(mesh = mesh, alpha = 2)
+# Sample one realisation from the Matérn field
+Q <- inla.spde2.precision(spde, theta = c(theta1, theta2))
+field_sample <- inla.qsample(n = 1, Q = Q)[, 1]
+# Project mesh values onto the regular grid for plotting
+A_proj <- inla.spde.make.A(mesh = mesh, loc = as.matrix(coords))
+coords$z <- as.vector(A_proj %*% field_sample)
+p_matern <- ggplot(coords, aes(x = x, y = y, fill = z)) +
+  geom_raster() +
+  scale_fill_distiller(palette = "RdYlBu", name = expression(f[1](s))) +
+  coord_fixed() +
+  labs(
+    title = "",
+    x = "",
+    y = ""
+  ) +
+  theme_bw() +
+  theme(panel.grid   = element_blank(),
+    axis.ticks   = element_blank(),
+    axis.text    = element_blank()
+  )
+return(p_matern)
+}
+
+
+# ── Combine with patchwork ────────────────────────────────────────────────────
+combined <- wrap_plots(build_matern(),
+                       build_matern(theta1 = 1),
+                       build_matern(theta1 = 5),
+                       nrow = 1) +
+  plot_annotation(
+    title    = "Effect of the sigma parameter on the Matérn field",
+    theme    = theme(
+      plot.title    = element_text(size = 14, face = "bold"))
+  )
+
+combined
+```
+
+## Some matern plots - rho
+
+```{r}
+combined <- wrap_plots(build_matern(),
+                       build_matern(theta2 = 2.5),
+                       build_matern(theta2 = 5),
+                       nrow = 1) +
+  plot_annotation(
+    title    = "Effect of the rho parameter on the Matérn field",
+    theme    = theme(
+      plot.title    = element_text(size = 14, face = "bold"))
+  )
+
+combined
+```
+
+## The issue of space
+
+-  As the amount of locations increases, so does the covariance matrix associated
+-  I.e. for 1000 observations the covariance matrix is 1000x1000
+-  So the naive approach of storing and estimating the Matern parameters directly is quickly computationally prohibitive
+
+## The SPDE insight: from dense covariance to sparse precision
+
+-  a Gaussian field with a Matérn covariance is the stationary solution to a specific Stochastic Partial Differential Equation (SPDE)
+-  The solution to this SPDE on a triangulated mesh has a sparse precision matrix $Q$ rather than a dense covariance matrix $Σ$
+-  Sparsity means most entries are exactly zero, and inference scales as $O(n^{3/2})$ instead of $O(n^3)$
+
+## The mesh: discretising space
+
+[-  To solve the SPDE, INLA/inlabru discretises the spatial domain using a constrained refined Delaunay triangulation (CRDТ): **the mesh**
+-  The mesh is a triangular grid that extends a bit beyond the spatial domain of interest to avoid boundary issues.
+-  The finer the mesh the more accurate the approximation, but at higher computational costs]{style="font-size: 0.65em;"}
+
+
+```{r}
+bnd <- fm_extensions(cbind(0, 0), convex = c(1, 1.5))
+
+mesh1 <- fm_mesh_2d_inla(
+  boundary = bnd,
+  max.edge = c(0.1, 0.5)
+)
+
+mesh2 <- fm_mesh_2d_inla(
+  boundary = bnd,
+  max.edge = c(0.2, 0.5)
+)
+
+mesh3 <- fm_mesh_2d_inla(
+  boundary = bnd,
+  max.edge = c(0.5, 0.5)
+)
+
+g1 <- ggplot() +
+  geom_fm(data = mesh1) +
+  theme_bw()
+
+g2 <- ggplot() +
+  geom_fm(data = mesh2) +
+  theme_bw()
+
+g3 <- ggplot() +
+  geom_fm(data = mesh3) +
+  theme_bw()
+
+g1 + g2 + g3
+
+
+```
+
+## Setting the SPDE
+
+Once we have a mesh, we can define a SPDE associated to it:
+
+```{r eval=FALSE}
+spde <- inla.spde2.pcmatern(
+  mesh  = mesh,
+  prior.range = c(50, 0.05),   # P(rho < 50) = 0.05
+  prior.sigma = c(1,  0.01)    # P(sigma > 1)    = 0.01
+)
+```
+
+The two hyperparameters are:
+
+| Hyperparameters | Interpretation | PC prior |
+|-----------------|----------------|----------|
+| $\rho$ (range)  | Distance at which correlation $\approx$ 0.13 | $P(\rho < \rho_0) = \alpha$ |
+| $\sigma$ (variation)  | Amplitude of spatial variation | $P(\sigma > \sigma_0) = \alpha$ |
+
+
+## Setting the PC prior in practice
+
+-  `prior.range = c(50, 0.05)` says "I think it is unlikely (5% chance) that the range is shorter than 50 units", shorter range means more complex fields, infinite range is a flat field.
+-  `prior.sigma = c(1, 0.01)` says "I think it is very unlikely (1% chance) that the spatial standard deviation exceeds 1" — on the scale of the linear predictor
+
+-  Some helps:
+
+```{r eval=FALSE, echo=TRUE}
+# 1. What is the maximum distance in your study area?
+max_dist <- max(dist(coordinates(dat)))
+
+# 2. A range smaller than ~5% of the domain is probably too short
+range_lower <- 0.05 * max_dist
+prior.range  <- c(range_lower, 0.05)
+
+# 3. What is the total SD of your response (on the link scale)?
+total_sd    <- sd(dat$y_link)   # e.g. log(y) for Poisson
+prior.sigma <- c(total_sd, 0.01)
+```
+
+## Fitting the model in inlabru
+
+```{r echo=FALSE}
+## set up the mesh
+m_d <- fm_mesh_2d_inla(loc = st_coordinates(fdat),
+                       max.edge = c(100, 1e4),
+                       max.n.strict = 1e4)
+
+## set up spde
+spde_field <- inla.spde2.pcmatern(mesh = m_d, 
+                                  prior.range = c(10000, 0.05),
+                                  prior.sigma = c(0.6, 0.01))
+```
+
+```{r echo=TRUE}
+m_matern <- bru(n ~ Intercept(1) + matern_field(geometry, model = spde_field),
+                data = fdat,
+                family = "poisson")
+
+summary(m_matern)
+```
+
+## Plotting the spatial field
+
+```{r echo=FALSE}
+greco <- st_read("../../IFN_stuff/data/geodata/greco_2154.gpkg", quiet = TRUE)
+
+grid_full <- st_make_grid(greco[greco$greco == "D",],
+                          n = 100)
+grid_crop <- st_intersection(grid_full,
+                             greco[greco$greco == "D",])
+grid_xy <- st_as_sf(st_centroid(grid_crop))
+grid_xy$ID <- 1:nrow(grid_xy)
+st_geometry(grid_xy) <- "geometry"
+
+```
+
+```{r echo=FALSE}
+pred <- predict(m_matern, grid_xy, ~ Intercept + matern_field)
+
+pred_grid <- st_drop_geometry(pred)
+pred_grid <- cbind(pred_grid, grid_crop)
+pred_grid <- st_as_sf(pred_grid)
+
+ggplot() +
+  geom_sf(data = pred_grid, aes(fill = mean), color = NA) +
+  scale_fill_continuous(type = "viridis") +
+  theme_void() +
+  labs(fill = "Predictions",
+       title = "Predicted species diversity")
+```
+
+
+## Wrapp up
+
+-  Spatial models with discrete spatial units are based on the neighborhood structure between the units
+-  It is recommended to use a *BYM2* model that provide an estimation of the proportion of the spatial variation that is structured by the neighborhood structure
+-  Continuous spatial fields can be costly to estimate - large covariance matrix
+-  The SPDE approach combined with a mesh allow for reliable and fast estimation of continuous spatial fields in INLA(bru)
