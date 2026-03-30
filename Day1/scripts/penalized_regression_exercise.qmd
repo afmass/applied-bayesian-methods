@@ -1,0 +1,123 @@
+---
+title: "Regularization and Bayesian Shrinkage"
+subtitle: "Links to ridge regression and LASSO"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: false
+---
+
+------------------------------------------------------------------------
+
+::: {.callout-note icon="false"}
+# Overview
+
+Penalized regression and Bayesian shrinkage are analogous concepts: when predictors are many or highly correlated, pulling coefficient estimates toward zero reduces variance at the cost of a small, controlled bias. This exercise builds the translation between these two frameworks in three steps.
+
+**Parts 1 and 2 use simulated data** with a known ground truth. Simulation allows you to verify that the theoretical equivalence holds numerically and check whether the posterior of the regularization parameter covers the true value. The simulation is designed specifically so that ridge regularization genuinely helps—featuring correlated predictors, all non-zero coefficients, and a moderate signal-to-noise ratio.
+
+**Part 3 uses the prostate cancer dataset** (Stamey et al., 1989; Tibshirani, 1996). This is a real-world dataset with $n = 97$ patients, $p = 8$ clinical predictors, and a continuous response (log PSA). OLS analysis suggests that some predictors are genuinely important (lcavol, svi, lweight) while others are near-noise (age, gleason, pgg45). This partial sparsity structure is exactly where Lasso and Horseshoe priors typically outperform Ridge.
+:::
+
+------------------------------------------------------------------------
+
+| Part | Data | Method | Key question |
+|----------------|---------------------|------------------|------------------|
+| 1 | Simulated — dense, correlated | Ridge (lm.ridge) + brms fixed tau | Does MAP equal ridge exactly? |
+| 2 | Same simulated data | Three brms models + loo_compare | Which tau do the data prefer? |
+| 3 | Prostate (real, n=97, p=8) | Lasso + Horseshoe via brms | Which predictors are truly non-zero? |
+
+------------------------------------------------------------------------
+
+# Ridge Regression as a Bayesian Normal-Normal Model
+
+## Purpose
+
+The MAP estimate of a Bayesian linear model with Normal(0, τ²) priors on coefficients is identical to the ridge regression solution, with the correspondence λ = σ²/τ². We use simulated data so we can verify the equivalence holds and compare both estimates to the known truth.
+
+## Simulation Design
+
+We need three things from the simulation for this part to work well: (1) a GCV curve with an interior minimum so that λ = 0 is not selected, (2) correlated predictors so ridge visibly improves on OLS, and (3) all coefficients non-zero so ridge is the right tool.
+
+Run the following code to get started with the simulation.
+
+```{r}
+#| label: simulate-data
+#| cache: true
+
+library(MASS)
+library(brms)
+library(tidyverse)
+
+# ── 1. Simulation ──────────────────────────────────────────────────────
+set.seed(42)
+n <- 250; p <- 15
+blk <- function(rho, k) { M <- matrix(rho, k, k); diag(M) <- 1; M }
+Sigma <- as.matrix(Matrix::bdiag(blk(0.9, 5), blk(0.9, 5), blk(0.9, 5)))
+X_raw <- MASS::mvrnorm(n, mu = rep(0, p), Sigma = Sigma)
+# Variables with different scales = different CI widths
+scales <- seq(1, 4, length.out = p)
+X_sim  <- sweep(X_raw, 2, scales, '*')
+beta_true <- c(1.2, 1, -1, 0.8, -0.6, 0.7, -0.7, 0.5, -0.4, 0.3, 0.3, -0.2, 0.2, -0.1, 0)
+y_sim  <- as.numeric(X_sim %*% beta_true + rnorm(n, sd = 4))
+df_sim <- data.frame(y = y_sim, X_sim)
+# ───────────────────────────────────────────────────────────────────────
+original_means <- colMeans(df_sim)      # keep the means to backtransform later!!
+original_sds <- apply(df_sim, 2, sd)    # keep the sds too
+sd_y <- original_sds['y']
+sd_x <- original_sds[names(original_sds) != 'y']
+df_sim <- as.data.frame(scale(df_sim))  # standardize dataset
+beta_true <- beta_true * (sd_x / sd_y)  # scale the 'true' coefficients for the plot!
+# ───────────────────────────────────────────────────────────────────────
+```
+
+## The Mathematical Correspondence
+
+To understand why Bayesian shrinkage and penalized regression are "two languages for the same idea," we compare their objective functions.
+
+**The Ridge Objective** 
+Ridge regression finds the coefficients by minimizing the penalized sum of squares:
+
+$$\min_{\beta} \|y - X\beta\|^2 + \lambda \|\beta\|^2$$
+
+**The Bayesian Specification** 
+
+The Bayesian linear model with Normal priors on coefficients is specified as follows:
+
+**Likelihood:** 
+$$y \mid \beta, \sigma \sim \mathcal{N}(X\beta, \sigma^2 I_n)$$ 
+
+**Priors:** $$\beta_j \sim \mathcal{N}(0, \tau^2) \quad \text{for } j = 1, \dots, p$$$$\beta_0 \sim \mathcal{N}(0, 10^2) \quad \text{(Intercept, weakly regularized)}$$$$\sigma \sim \text{fixed at } \sigma_{\text{est}} \quad \text{(Pinned in Part 1)}$$
+
+**The Identity** 
+
+The log-posterior (ignoring constants) is:
+$$-\log p(\beta \mid y) \propto \frac{\|y - X\beta\|^2}{2\sigma^2} + \frac{\|\beta\|^2}{2\tau^2}$$
+**The MAP (Maximum A Posteriori)** estimate is the $\beta$ that minimizes:
+$$\text{argmin}_{\beta} \|y - X\beta\|^2 + \left( \frac{\sigma^2}{\tau^2} \right) \|\beta\|^2$$
+Comparing the MAP objective to the Ridge objective gives the exact identity:
+$$\lambda = \frac{\sigma^2}{\tau^2} \implies \tau = \frac{\sigma}{\sqrt{\lambda}}$$
+
+::: {.callout-important}
+### Note on Implementation
+
+We use MASS::lm.ridge throughout Parts 1 and 2 because it minimizes $\|y - X\beta\|^2 + \lambda\|\beta\|^2$ directly, without the $1/(2n)$ normalization often found in other packages (like *glmnet*). This ensures the identity $\lambda = \sigma^2 / \tau^2$ holds exactly without requiring a scaling correction.
+:::
+
