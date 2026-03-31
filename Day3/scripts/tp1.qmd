@@ -1,0 +1,310 @@
+---
+title: "TP1: Intro to INLA(bru)"
+subtitle: "Hierarchical models"
+author: "Lionel Hertzog"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: false
+  eval: false
+---
+
+::: {.callout-note icon="false"}
+## Objective
+
+For this TP we will use a dataset containing 270 bird surveys made in 54 different sites within 8 regions. Each site was observed 5 times by different observers and every survey contains additionnal information including habitat type, elevation, canopy cover and temperature on the survey day.
+
+The aim is to develop and test different mixed-effect models to explain the impact od the environment on bird counts.
+:::
+
+## Metadata
+
+```{r eval=TRUE}
+bird <- read.csv("bird_data.csv")
+head(bird)
+```
+
+```{r eval=TRUE}
+str(bird)
+```
+
+
+The columns are:
+
+-  survey_id: an ID for the survey ranging from 1 to 270
+-  region: an ID for the region of study ranging from 1 to 8
+-  site: a site ID ranging from 1 to 54
+-  observer: a character of the observer that did the survey with 6 levels
+-  habitat: a character specifying the habitat type with three levels: forest, grassland and wetland
+-  elevation_m: a numeric giving the elevation of the site in m 
+-  canopy_pct: a numeric, canopy cover in percentage 
+-  temp_C: the temperature the day of the survey in °C 
+-  count: the number of birds observed
+
+
+## Data Exploration
+
+### Descriptice stats 
+
+Explore the data, looking at descriptive statistics of the various variables: mean, sd, range, sample size per levels.
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+Check functions like `mean`, `sd`, `table`, `xtabs`. You an get the help of a R function by typing `?` in front of it, for instance:
+```{r}
+?mean
+```
+:::
+
+### Correlations
+
+Look at the correlation between the continuous variables including *count*
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Check the function `cor` or `cor.test`.
+
+:::
+
+
+### Boxplots
+
+Make boxplots of bird counts against (i) region and (ii) observer to explore variability in counts across these variables.
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Check the function `boxplot` or use ggplot if already familiar with it.
+
+:::
+
+## Model fitting
+
+### 
+
+Fit a first model in inlabru with as response the bird count, as covariates habitat, elevation, canopy and temperature and a random intercept for observer.
+
+Choose an appropriate distribution.
+
+Take care 1: variables passed as random effects should be as integer (ID), so `observer` needs to be turned into `observer_id`
+
+Take care 2: INLA(bru) does not automatically map factor variables to contrasts, you can use in the model formula:
+```{r eval=FALSE}
+habitat(main = habitat, model = "factor_contrast")
+```
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint 1
+
+Remember that random intercept can be set using the `iid` model in INLA(bru):
+
+```{r eval=FALSE}
+f(observer_id, model = "iid")
+```
+
+:::
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint 2
+
+Here is an option to fit the model:
+
+```{r eval=FALSE}
+bird$observer_id <- as.integer(factor(bird$observer))
+m1 <- bru(count ~ Intercept(1) + elevation_m + canopy_pct + temp_C + obs_eff(observer_id, model = "iid") + habitat(main = habitat, model = "factor_contrast"),  data = bird, family = "poisson")
+```
+
+:::
+
+Explore the model output using `summary`, ``model$summary.random` ...
+
+
+###
+
+Add weakly informative PC prior to the random effect setting:
+
+$$
+P(\sigma > 4) = 0.01
+$$
+Also check other settings or if interested other prior distribution like `gamma` or `logtnormal`.
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Setting priors on model components is done via the `hyper` argument:
+
+```{r eval=FALSE}
+obs_eff(observer_id, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01))))
+```
+
+:::
+
+Did this affect the estimated observer effect? Did the other model parameters changed?
+
+###
+
+Now we want to introduce a random site effect nested within a region effect.
+
+To do this in INLA(bru), we pass two separate random effects one for region and one for site ensuring that site IDs are unique and not repeated.
+
+Add also PC prior on these components.
+
+Interpret and check the output, fixed effects, random terms ...
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Here is how it can be done:
+
+```{r eval=FALSE}
+m2 <- bru(count ~ Intercept(1) + elevation_m + canopy_pct + temp_C + obs_eff(observer_id, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01))))+ region_eff(region, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01))))+ site_eff(site, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01)))) + habitat(main = habitat, model = "factor_contrast"),  data = bird, family = "poisson")
+```
+
+:::
+
+## Model checks
+
+###
+
+A hepful package to check model assumptions is `DHARMa`.
+
+With INLa(bru) model we can use it as such:
+
+1.  Generate model simulations matrix (rows observations, columns simulations) using the `generate` function, the generate functions should output simulated observations so $Poisson(e^{\eta_i})$ for this model.
+2.  Pass these simulations to the `createDHARMa` function
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Here is how it can be done:
+
+```{r eval=FALSE, message=FALSE}
+sims <- generate(m1, bird, ~ rpois(n = nrow(bird),
+                                   lambda = exp(Intercept + elevation_m + canopy_pct + temp_C + habitat + obs_eff)))
+ch_m1 <- createDHARMa(sims, bird$count)
+```
+
+:::
+
+Do these steps for one of the two fitted model.
+
+### 
+
+Once a DHARMa object is created we can check various model assumptions.
+
+Perform the following checks on the model:
+-  overdispersion via `testDispersion`
+-  outliers with `testOutliers`
+-  residual distribution wit `plotResiduals`
+
+What do you think? Do you see potential improvment on this model?
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Given the evidence of overdispersion, a negative binomial is a natural next choice to improve the model.
+
+```{r message=FALSE}
+m3 <- bru(count ~ Intercept(1) + elevation_m + canopy_pct + temp_C + obs_eff(observer_id, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01))))+ region_eff(region, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01))))+ site_eff(site, model = "iid", hyper = list(prec = list(prior = "pc.prec", param = c(4, 0.01)))) + habitat(main = habitat, model = "factor_contrast"),  data = bird, family = "nbinomial")
+```
+
+:::
+
+###
+
+Explore various options to improve the model fit and try to achieve good model checks.
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Check various alternative family `nbinomial` potentially with variants as defined in `inla.doc("nbinomial")`.
+
+:::
+
+
+## Model interpretation
+
+###
+
+We want know to plot the estimated effects of temperature and canopy cover on bird count.
+
+Derive model predictions along gradients of temperature and canopy cover, and plot the resulting regression lines together with their confidence bands.
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+Create first a new data frame with a gradient in temperature while all other variables are held constant to their mean:
+
+```{r}
+newdat_temp <- data.frame(temp_C = seq(min(bird$temp_C),
+                                       max(bird$temp_C),
+                                       length.out = 10),
+                          elevation_m = mean(bird$elevation_m),
+                          canopy_pct = mean(bird$canopy_pct))
+
+pred_temp <- predict(m3, newdat_temp, ~ exp(Intercept + elevation_m + canopy_pct + temp_C))
+
+ggplot(pred_temp, aes(x=temp_C, y=mean, ymin=q0.025, ymax=q0.975)) +
+  geom_ribbon(alpha = 0.1) +
+  geom_path() +
+  theme_classic() +
+  labs(x = "Temperature (°C)",
+       y = "Predicted bird counts (with 95% CI")
+
+```
+
+:::
+
+###
+
+Now we want to explore the variations in bird counts between the site within the regions and between the observers.
+
+We can access the estimated deviation from the average bird counts per levels of the random terms via `m$summary.random` which is a list of dataframes with the estimated random terms.
+
+Plot first the estimated observer deviations. What do you think?
+
+Plot then the site within regions deviations, to do this add the region random effects to the adequate site random effects.
+
+::: {.callout-tip icon="false" collapse="true"}
+#### Hint
+
+For the site within region deviations we can use the `predict` function.
+
+```{r}
+pred_site <- predict(
+  m3,
+  newdata = unique(bird[, c("site", "region")]),
+  formula = ~ region_eff + site_eff
+)
+
+ggplot(pred_site, aes(x=fct_reorder(factor(site), mean),
+                      y = mean,
+                      ymin=q0.025,
+                      ymax=q0.975)) +
+  geom_linerange() +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  labs(x = "Site",
+       y = "Deviation from average")
+
+```
+
+:::
