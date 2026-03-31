@@ -1,6 +1,6 @@
 ---
-title: "Regularization and Bayesian Shrinkage"
-subtitle: "Links to ridge regression and LASSO"
+title: "Exercise: Regularization and Bayesian Shrinkage"
+subtitle: "Ridge, Lasso, and Horseshoe Priors"
 author: "Alexander Massey"
 date: today
 format:
@@ -24,47 +24,46 @@ execute:
   cache: false
 ---
 
+```{r}
+#| label: setup
+#| echo: false
+library(MASS)
+library(brms)
+library(tidyverse)
+library(loo)
+```
+
 ------------------------------------------------------------------------
 
 ::: {.callout-note icon="false"}
-# Overview
+## Overview
 
-Penalized regression and Bayesian shrinkage are analogous concepts: when predictors are many or highly correlated, pulling coefficient estimates toward zero reduces variance at the cost of a small, controlled bias. This exercise builds the translation between these two frameworks in three steps.
+This exercise develops a unified view of penalized regression and Bayesian shrinkage through three connected parts. The core insight is that every penalized regression method corresponds to a Bayesian model with a specific prior on the coefficients — the penalty parameter $\lambda$ is not a nuisance to be selected by cross-validation but a parameter with a statistical interpretation.
 
-**Parts 1 and 2 use simulated data** with a known ground truth. Simulation allows you to verify that the theoretical equivalence holds numerically and check whether the posterior of the regularization parameter covers the true value. The simulation is designed specifically so that ridge regularization genuinely helps—featuring correlated predictors, all non-zero coefficients, and a moderate signal-to-noise ratio.
+**Parts 1 and 2** use simulated data with a known ground truth. Simulation lets you verify the theoretical equivalence numerically and compare estimates to the truth directly.
 
-**Part 3 uses the prostate cancer dataset** (Stamey et al., 1989; Tibshirani, 1996). This is a real-world dataset with $n = 97$ patients, $p = 8$ clinical predictors, and a continuous response (log PSA). OLS analysis suggests that some predictors are genuinely important (lcavol, svi, lweight) while others are near-noise (age, gleason, pgg45). This partial sparsity structure is exactly where Lasso and Horseshoe priors typically outperform Ridge.
+**Part 3** uses the prostate cancer dataset (Stamey et al., 1989) — a real dataset with genuine partial sparsity where lasso and horseshoe outperform ridge.
+
+| Part | Data | Method | Key question |
+|------------------|-------------------|------------------|------------------|
+| 1 | Simulated — dense, correlated | Ridge (`lm.ridge`) + brms fixed $\tau$ | Does the Bayesian MAP equal ridge exactly? |
+| 2 | Same simulated data | Three brms models + `loo_compare` | Which $\tau$ do the data prefer? |
+| 3 | prostate ($n=97$,$p=8$) | Lasso + Horseshoe via brms | Which predictors are truly non-zero? |
 :::
 
 ------------------------------------------------------------------------
 
-| Part | Data | Method | Key question |
-|----------------|---------------------|------------------|------------------|
-| 1 | Simulated — dense, correlated | Ridge (lm.ridge) + brms fixed tau | Does MAP equal ridge exactly? |
-| 2 | Same simulated data | Three brms models + loo_compare | Which tau do the data prefer? |
-| 3 | Prostate (real, n=97, p=8) | Lasso + Horseshoe via brms | Which predictors are truly non-zero? |
+## Simulation
 
-------------------------------------------------------------------------
-
-# Ridge Regression as a Bayesian Normal-Normal Model
-
-## Purpose
-
-The MAP estimate of a Bayesian linear model with Normal(0, τ²) priors on coefficients is identical to the ridge regression solution, with the correspondence λ = σ²/τ². We use simulated data so we can verify the equivalence holds and compare both estimates to the known truth.
-
-## Simulation Design
-
-We need three things from the simulation for this part to work well: (1) a GCV curve with an interior minimum so that λ = 0 is not selected, (2) correlated predictors so ridge visibly improves on OLS, and (3) all coefficients non-zero so ridge is the right tool.
-
-Run the following code to get started with the simulation.
+The simulation is designed so that ridge regularization genuinely helps: high within-block correlation ($\rho = 0.9$), predictors on different scales, and a moderate signal-to-noise ratio. With this design the GCV curve has a clear interior minimum around $\lambda \approx 7$–$8$.
 
 ```{r}
-#| label: simulate-data
-#| cache: true
+#| label: simulation
 
 library(MASS)
 library(brms)
 library(tidyverse)
+library(loo)
 
 # ── 1. Simulation ──────────────────────────────────────────────────────
 set.seed(42)
@@ -74,50 +73,711 @@ Sigma <- as.matrix(Matrix::bdiag(blk(0.9, 5), blk(0.9, 5), blk(0.9, 5)))
 X_raw <- MASS::mvrnorm(n, mu = rep(0, p), Sigma = Sigma)
 # Variables with different scales = different CI widths
 scales <- seq(1, 4, length.out = p)
-X_sim  <- sweep(X_raw, 2, scales, '*')
+X_sim  <- sweep(X_raw, 2, scales, "*")
 beta_true <- c(1.2, 1, -1, 0.8, -0.6, 0.7, -0.7, 0.5, -0.4, 0.3, 0.3, -0.2, 0.2, -0.1, 0)
 y_sim  <- as.numeric(X_sim %*% beta_true + rnorm(n, sd = 4))
 df_sim <- data.frame(y = y_sim, X_sim)
 # ───────────────────────────────────────────────────────────────────────
-original_means <- colMeans(df_sim)      # keep the means to backtransform later!!
-original_sds <- apply(df_sim, 2, sd)    # keep the sds too
-sd_y <- original_sds['y']
-sd_x <- original_sds[names(original_sds) != 'y']
-df_sim <- as.data.frame(scale(df_sim))  # standardize dataset
-beta_true <- beta_true * (sd_x / sd_y)  # scale the 'true' coefficients for the plot!
+original_means <- colMeans(df_sim)      # keep the means to backtransform later
+original_sds   <- apply(df_sim, 2, sd)  # keep the sds too
+sd_y <- original_sds["y"]
+sd_x <- original_sds[names(original_sds) != "y"]
+df_sim     <- as.data.frame(scale(df_sim))  # standardize dataset
+beta_true  <- beta_true * (sd_x / sd_y)     # scale the true coefficients for the plot
 # ───────────────────────────────────────────────────────────────────────
 ```
 
-## The Mathematical Correspondence
+------------------------------------------------------------------------
 
-To understand why Bayesian shrinkage and penalized regression are "two languages for the same idea," we compare their objective functions.
+## Part 1 — Ridge Regression as a Bayesian Normal-Normal Model
 
-**The Ridge Objective** 
-Ridge regression finds the coefficients by minimizing the penalized sum of squares:
+### The Mathematical Correspondence
 
-$$\min_{\beta} \|y - X\beta\|^2 + \lambda \|\beta\|^2$$
+Ridge regression solves:
 
-**The Bayesian Specification** 
+$$\min_{\boldsymbol{\beta}} \; \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|^2 + \lambda\|\boldsymbol{\beta}\|^2$$
 
-The Bayesian linear model with Normal priors on coefficients is specified as follows:
+A Bayesian linear model with Normal priors on coefficients has the following specification:
 
-**Likelihood:** 
-$$y \mid \beta, \sigma \sim \mathcal{N}(X\beta, \sigma^2 I_n)$$ 
+$$\mathbf{y} \mid \boldsymbol{\beta}, \sigma \sim \mathcal{N}(\mathbf{X}\boldsymbol{\beta},\; \sigma^2 \mathbf{I}_n)$$
 
-**Priors:** $$\beta_j \sim \mathcal{N}(0, \tau^2) \quad \text{for } j = 1, \dots, p$$$$\beta_0 \sim \mathcal{N}(0, 10^2) \quad \text{(Intercept, weakly regularized)}$$$$\sigma \sim \text{fixed at } \sigma_{\text{est}} \quad \text{(Pinned in Part 1)}$$
+$$\beta_j \sim \mathcal{N}(0, \tau^2) \quad \text{for } j = 1, \ldots, p$$
 
-**The Identity** 
+The negative log-posterior is:
 
-The log-posterior (ignoring constants) is:
-$$-\log p(\beta \mid y) \propto \frac{\|y - X\beta\|^2}{2\sigma^2} + \frac{\|\beta\|^2}{2\tau^2}$$
-**The MAP (Maximum A Posteriori)** estimate is the $\beta$ that minimizes:
-$$\text{argmin}_{\beta} \|y - X\beta\|^2 + \left( \frac{\sigma^2}{\tau^2} \right) \|\beta\|^2$$
-Comparing the MAP objective to the Ridge objective gives the exact identity:
-$$\lambda = \frac{\sigma^2}{\tau^2} \implies \tau = \frac{\sigma}{\sqrt{\lambda}}$$
+$$-\log p(\boldsymbol{\beta} \mid \mathbf{y}) = \frac{\|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|^2}{2\sigma^2} + \frac{\|\boldsymbol{\beta}\|^2}{2\tau^2} + \text{const}$$
 
-::: {.callout-important}
-### Note on Implementation
+Comparing the MAP objective to the ridge objective gives the exact identity:
 
-We use MASS::lm.ridge throughout Parts 1 and 2 because it minimizes $\|y - X\beta\|^2 + \lambda\|\beta\|^2$ directly, without the $1/(2n)$ normalization often found in other packages (like *glmnet*). This ensures the identity $\lambda = \sigma^2 / \tau^2$ holds exactly without requiring a scaling correction.
+$$\boxed{\lambda = \frac{\sigma^2}{\tau^2} \qquad \Longleftrightarrow \qquad \tau = \frac{\sigma}{\sqrt{\lambda}}}$$
+
+::: {.callout-note icon="false"}
+## Why lm.ridge?
+
+We use `lm.ridge` (MASS package) throughout Parts 1 and 2 because it minimizes $\|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|^2 + \lambda\|\boldsymbol{\beta}\|^2$ directly with no $1/(2n)$ normalization. This means the identity $\lambda = \sigma^2/\tau^2$ holds with no scaling correction. The `glmnet` package divides by $2n$, which would require an additional factor of $n$ in the correspondence.
 :::
 
+### Code
+
+#### Step 1 — Select $\lambda$ by GCV
+
+```{r}
+#| label: part1-gcv
+#| fig-width: 7
+#| fig-height: 4
+
+# We find lambda via Generalized Cross-Validation (GCV)
+ridge_grid <- lm.ridge(y ~ ., data = df_sim, lambda = seq(0, 20, by = .01))
+
+# Always plot the GCV curve before accepting the minimum
+plot(ridge_grid$lambda, ridge_grid$GCV, type = "l",
+     xlab = expression(lambda), ylab = "GCV",
+     main = "GCV curve — check for interior minimum")
+abline(v = as.numeric(names(which.min(ridge_grid$GCV))), col = "red", lty = 2)
+
+lambda_gcv <- as.numeric(names(which.min(ridge_grid$GCV)))
+cat("GCV lambda:", lambda_gcv)
+
+# Fit ridge at the selected lambda
+ridge_fit <- lm.ridge(y ~ ., data = df_sim, lambda = lambda_gcv)
+```
+
+#### Step 2 — Derive $\sigma$ and $\tau$
+
+```{r}
+#| label: part1-sigma-tau
+
+# Estimate sigma from OLS (unbiased, uses n-p-1 df correction)
+ols_fit   <- lm(y ~ ., data = df_sim)
+sigma_est <- summary(ols_fit)$sigma
+
+# tau from the correspondence: lambda = sigma^2 / tau^2
+tau_est <- sigma_est / sqrt(lambda_gcv)
+
+cat("sigma_est:", round(sigma_est, 4))
+cat("tau_est:  ", round(tau_est,   4))
+cat("Verify — sigma^2/tau^2 =", round(sigma_est^2 / tau_est^2, 4),
+    "== lambda_gcv:", lambda_gcv)
+```
+
+#### Step 3 — Fit two Bayesian models
+
+We fit two models to make the shrinkage contrast explicit. The first uses brms default priors, making it essentially equivalent to OLS. The second uses the $\tau$ derived from GCV and pins $\sigma$, making it equivalent to ridge.
+
+```{r}
+#| label: part1-brms
+#| cache: true
+
+# Model 1: OLS-like Bayes — brms default priors, sigma free
+fit_ols_b <- brm(
+  y ~ ., data = df_sim,
+  chains  = 2, iter = 2000, refresh = 0, backend = "rstan"
+)
+
+# Model 2: Empirical Bayes — ridge-informed prior, sigma pinned
+# tau comes from GCV; sigma is fixed so MAP = ridge solution
+fit_eb <- brm(
+  y ~ ., data = df_sim,
+  prior = c(
+    set_prior(paste0("normal(0, ", round(tau_est, 6), ")"), class = "b"),
+    set_prior(paste0("normal(", round(sigma_est, 4), ", 0.001)"), class = "sigma")
+    # set_prior("exponential(1)", class = "sigma")  # uncomment for Question 4
+  ),
+  chains = 2, iter = 4000, refresh = 0, backend = "rstan"
+)
+```
+
+#### Step 4 — Compare all methods
+
+```{r}
+#| label: part1-plot
+#| fig-width: 9
+#| fig-height: 6
+
+res_ols_b <- fixef(fit_ols_b)[-1, ]
+res_eb    <- fixef(fit_eb)[-1, ]
+
+results <- tibble(
+  Predictor = paste0("X", 1:p),
+  Truth     = beta_true,
+  Ridge     = coef(ridge_fit)[-1],
+  OLS       = res_ols_b[, "Estimate"],
+  OLS_L     = res_ols_b[, "Q2.5"],
+  OLS_U     = res_ols_b[, "Q97.5"],
+  EB_Est    = res_eb[, "Estimate"],
+  EB_L      = res_eb[, "Q2.5"],
+  EB_U      = res_eb[, "Q97.5"]
+) %>%
+  pivot_longer(cols = c(Truth, OLS, EB_Est, Ridge),
+               names_to = "Method", values_to = "Estimate") %>%
+  mutate(Method = case_when(
+    Method == "EB_Est" ~ "Emp. Bayes",
+    Method == "OLS"    ~ "OLS",
+    TRUE ~ Method
+  )) %>%
+  mutate(Method = factor(Method, levels = c("Truth", "OLS", "Emp. Bayes", "Ridge")))
+
+ggplot(results, aes(x = reorder(Predictor, abs(Estimate)),
+                    y = Estimate, color = Method, shape = Method)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70") +
+  # OLS credible intervals — wide, showing high variance
+  geom_errorbar(data = filter(results, Method == "OLS"),
+                aes(ymin = OLS_L, ymax = OLS_U),
+                width = 0.5, linewidth = 0.8, alpha = 0.3,
+                position = position_dodge(width = 0.9)) +
+  # Emp. Bayes credible intervals — narrower after shrinkage
+  geom_errorbar(data = filter(results, Method == "Emp. Bayes"),
+                aes(ymin = EB_L, ymax = EB_U),
+                width = 0.5, linewidth = 1.2, alpha = 0.6,
+                position = position_dodge(width = 0.9)) +
+  geom_point(size = 3.5, position = position_dodge(width = 0.9)) +
+  scale_color_manual(values = c(Truth = "black", OLS = "#E69F00",
+                                `Emp. Bayes` = "#0072B2", Ridge = "#D55E00")) +
+  scale_shape_manual(values = c(Truth = 16, OLS = 17, `Emp. Bayes` = 18, Ridge = 15)) +
+  coord_flip() +
+  labs(title   = "Shrinkage Spectrum with Bayesian CIs",
+       subtitle = "Emp. Bayes (Blue) mimics Ridge (Red). OLS (Orange) shows high variance.",
+       x = NULL, y = "Coefficient Estimate") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+### Exercises
+
+------------------------------------------------------------------------
+
+**Q1.1** Demonstrate that the simulated data is multicollinear. Inspect the correlation structure visually and numerically.
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   Use `pairs(df_sim[, 1:6])` to visualize pairwise scatterplots for the first block.
+-   Use `cor(df_sim[, -1])` to compute the full correlation matrix. Which pairs of predictors have the highest correlation?
+-   Compute the condition number of $\mathbf{X}'\mathbf{X}$ using `kappa(t(X_sim) %*% X_sim)`. A condition number much greater than 30 indicates problematic multicollinearity for OLS.
+:::
+
+------------------------------------------------------------------------
+
+**Q1.2** Plot the GCV curve before selecting $\lambda$. Is the minimum clearly interior ($\lambda > 0$), or does GCV decrease monotonically toward zero? What would a monotonically decreasing GCV curve tell you about the suitability of ridge regularization? The initial grid search used steps of 0.01. How would you refine it further?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   $\lambda = 0$ means no penalty at all — the ridge solution collapses to OLS. A GCV minimum at zero means regularization does not help.
+-   Refine the grid near the minimum: `ridge_grid2 <- lm.ridge(y ~ ., data = df_sim, lambda = seq(lambda_gcv - 1, lambda_gcv + 1, by = 0.001))`. Does the selected $\lambda$ change?
+-   The block correlation structure ($\rho = 0.9$) is designed to produce a genuine interior minimum.
+:::
+
+------------------------------------------------------------------------
+
+**Q1.3** Verify that OLS and its Bayesian equivalent (`fit_ols_b`) produce the same coefficient estimates. What happens if you use brms default priors instead of specifying them explicitly? Then address: (a) Why are some shrinkage estimates larger than the true values? (b) Why are Ridge and Emp. Bayes not exactly the same?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   Compare `summary(ols_fit)` to `fixef(fit_ols_b)`. Use `prior_summary(fit_ols_b)` to inspect the default priors.
+-   
+    (a) Shrinkage always pulls toward zero, not toward the truth. If OLS overestimates a coefficient due to multicollinearity, ridge pulls it back toward zero — which may overshoot or undershoot the truth. On standardized data, Ridge and Emp. Bayes should agree closely because both operate on the same scale.
+-   
+    (b) Shrinkage reduces mean squared error on average across all coefficients, but individual coefficients can end up further from the truth than OLS if the OLS error happened to be in the direction of the truth.
+:::
+
+------------------------------------------------------------------------
+
+**Q1.4** Free $\sigma$ by replacing the pinned prior with `set_prior("exponential(1)", class = "sigma")` in `fit_eb` and refit. Compare the posterior means to ridge. Explain why the result reverts toward OLS rather than staying near ridge. Is this what you would expect for larger or smaller $n$?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   `tau_est` was derived as `sigma_est / sqrt(lambda_gcv)`. When $\sigma$ is free, the posterior of $\sigma$ shifts toward the OLS residual SD, which is larger than `sigma_est`. This inflates the effective $\lambda = \sigma^2/\tau^2$, weakening the shrinkage.
+-   GCV and full Bayes optimize different things. GCV minimizes an estimate of out-of-sample prediction error and explicitly penalizes model complexity through the hat matrix. brms with a free $\sigma$ finds the posterior most consistent with the data and prior jointly — with a weak enough prior on $\beta$, the likelihood dominates and the posterior concentrates near the MLE (OLS).
+-   The key insight: $\tau$ and $\sigma$ are coupled through $\lambda = \sigma^2/\tau^2$. You cannot free one without changing the implied $\lambda$.
+-   Decreasing $n$ makes this worse, not better — with less data the likelihood is weaker and $\sigma$ drifts even further toward OLS.
+:::
+
+------------------------------------------------------------------------
+
+## Part 2 — Choosing $\tau$: A Bayesian Model Comparison
+
+### Motivation
+
+Part 1 back-calculated $\tau$ from a GCV-selected $\lambda$. This is unsatisfying from a Bayesian perspective — it uses the data twice and frames $\tau$ as a derived frequentist quantity rather than a genuine prior belief.
+
+The fully coherent approach would be to place a prior on $\tau$ itself and let the posterior update it. This requires writing $\tau$ into Stan's `parameters` block so that it is sampled alongside the coefficients — straightforward in raw Stan or cmdstanr, but outside the scope of this exercise.
+
+Instead, we take a practical approach that stays within brms: fit three models with different fixed values of $\tau$ and use leave-one-out cross-validation (LOO) to ask which $\tau$ the data prefer. This is Bayesian model comparison — no frequentist quantity is involved.
+
+::: {.callout-important icon="false"}
+## LOO vs GCV — Are They Really Different?
+
+Both LOO model comparison and GCV use the data to select the hyperparameter controlling shrinkage. In ridge regression with GCV you search over $\lambda$ and pick the one with best predictive error. With LOO you search over $\tau$ and pick the one with best predictive density. The mechanics differ but the epistemology is the same: **you are using the data to choose your prior**, which is the definition of empirical Bayes.
+
+The added value of LOO is honesty about uncertainty: when `elpd_diff` is smaller than $2 \times$ SE across models, the data genuinely cannot distinguish between the priors. GCV would have given you a point estimate of $\lambda$ and hidden that uncertainty entirely.
+:::
+
+### The Three Models
+
+All three models share the same likelihood and the same prior on $\sigma$. They differ only in $\tau$, the scale of the Normal prior on coefficients. On standardized data, $\tau$ encodes a prior belief about typical coefficient magnitude.
+
+$$\beta_j \sim \mathcal{N}(0, \tau^2), \quad \sigma \sim \text{Exponential}(1)$$
+
+| Model    | $\tau$ | Prior belief                                |
+|----------|--------|---------------------------------------------|
+| Tight    | 0.1    | Most coefficients $< 0.1$ in absolute value |
+| Moderate | 0.3    | Most coefficients $< 0.3$                   |
+| Loose    | 100    | Essentially flat — approaches OLS           |
+
+Note that $\tau$ is fixed in each model, not estimated. The LOO comparison selects which fixed $\tau$ the data prefer. This corresponds to ridge penalties $\lambda = \sigma^2/\tau^2$ of roughly 100, 11, and near-zero respectively (using $\sigma \approx 1$).
+
+### Code
+
+```{r}
+#| label: part2-models
+#| cache: true
+
+library(loo)
+
+# Model 1: tight prior — strong shrinkage
+fit_tight <- brm(
+  y ~ ., data = df_sim,
+  prior = c(
+    prior(normal(0, 0.1), class = b),
+    prior(exponential(1), class = sigma)
+  ),
+  chains = 2, iter = 4000, warmup = 1000,
+  seed = 1, backend = "rstan", refresh = 0,
+  save_pars = save_pars(all = TRUE)
+)
+
+# Model 2: moderate prior — weakly informative
+fit_mod <- brm(
+  y ~ ., data = df_sim,
+  prior = c(
+    prior(normal(0, 0.3), class = b),
+    prior(exponential(1), class = sigma)
+  ),
+  chains = 2, iter = 4000, warmup = 1000,
+  seed = 1, backend = "rstan", refresh = 0,
+  save_pars = save_pars(all = TRUE)
+)
+
+# Model 3: loose prior — near-OLS
+fit_loose <- brm(
+  y ~ ., data = df_sim,
+  prior = c(
+    prior(normal(0, 100), class = b),
+    prior(exponential(1), class = sigma)
+  ),
+  chains = 2, iter = 4000, warmup = 1000,
+  seed = 1, backend = "rstan", refresh = 0,
+  save_pars = save_pars(all = TRUE)
+)
+```
+
+```{r}
+#| label: part2-loo
+
+# Compute LOO for each model
+loo_tight <- loo(fit_tight)
+loo_mod   <- loo(fit_mod)
+loo_loose <- loo(fit_loose)
+
+# Compare — higher ELPD (less negative) is better
+# A difference smaller than 2*SE is not worth interpreting
+loo_compare(loo_tight, loo_mod, loo_loose)
+```
+
+```{r}
+#| label: part2-plot-std
+#| fig-width: 9
+#| fig-height: 6
+
+# Plot 1 — standardized scale
+fe_tight <- fixef(fit_tight)
+fe_mod   <- fixef(fit_mod)
+fe_loose <- fixef(fit_loose)
+
+preds <- paste0("X", 1:p)
+
+coef_comp <- tibble(
+  Predictor = preds,
+  Truth     = beta_true,
+  Ridge_GCV = coef(ridge_fit)[-1],
+  Tight     = fe_tight[preds, "Estimate"],
+  Moderate  = fe_mod[preds,   "Estimate"],
+  Loose     = fe_loose[preds, "Estimate"]
+)
+
+coef_comp |>
+  pivot_longer(c(Truth, Ridge_GCV, Tight, Moderate, Loose),
+               names_to = "Method", values_to = "Estimate") |>
+  mutate(Method = factor(Method,
+         levels = c("Truth", "Ridge_GCV", "Tight", "Moderate", "Loose"))) |>
+  ggplot(aes(x = reorder(Predictor, abs(Estimate)),
+             y = Estimate, color = Method, shape = Method)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70") +
+  geom_point(size = 3, position = position_dodge(0.6)) +
+  coord_flip() +
+  scale_color_manual(values = c(Truth = "black", Ridge_GCV = "#D55E00",
+                                Tight = "#0072B2", Moderate = "#009E73",
+                                Loose = "#CC79A7")) +
+  labs(title   = "Coefficients under three prior scales (standardized)",
+       subtitle = "Tight (τ=0.1)  |  Moderate (τ=0.3)  |  Loose (τ=100)",
+       x = NULL, y = "Coefficient estimate (standardized scale)") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+```{r}
+#| label: part2-plot-bt
+#| fig-width: 9
+#| fig-height: 6
+
+# Plot 2 — back-transformed to original scale
+bt_fixef <- function(fit, model_name) {
+  fe <- fixef(fit)
+  fe <- fe[rownames(fe) != "Intercept", ]
+  tibble(
+    Predictor = paste0("X", 1:p),
+    Method    = model_name,
+    Estimate  = fe[, "Estimate"] * (sd_y / sd_x),
+    L         = fe[, "Q2.5"]    * (sd_y / sd_x),
+    U         = fe[, "Q97.5"]   * (sd_y / sd_x)
+  )
+}
+
+results_p2 <- bind_rows(
+  bt_fixef(fit_tight, "Tight (τ=0.1)"),
+  bt_fixef(fit_mod,   "Moderate (τ=0.3)"),
+  bt_fixef(fit_loose, "Loose (τ=100)")
+) |>
+  mutate(Method = factor(Method,
+         levels = c("Tight (τ=0.1)", "Moderate (τ=0.3)", "Loose (τ=100)")))
+
+# Reference points: truth and ridge on original scale
+ref <- tibble(
+  Predictor = paste0("X", 1:p),
+  Truth     = beta_true * (sd_y / sd_x),
+  Ridge_GCV = coef(ridge_fit)[-1] * (sd_y / sd_x)
+)
+
+ggplot(results_p2,
+       aes(x = reorder(Predictor, abs(Estimate)),
+           y = Estimate, color = Method, shape = Method)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey70") +
+  geom_errorbar(aes(ymin = L, ymax = U),
+                width = 0.4, linewidth = 0.8, alpha = 0.4,
+                position = position_dodge(width = 0.7)) +
+  geom_point(size = 3, position = position_dodge(width = 0.7)) +
+  geom_point(data = ref, aes(x = Predictor, y = Truth),
+             color = "black", shape = 16, size = 3, inherit.aes = FALSE) +
+  geom_point(data = ref, aes(x = Predictor, y = Ridge_GCV),
+             color = "#D55E00", shape = 15, size = 3, inherit.aes = FALSE) +
+  coord_flip() +
+  scale_color_manual(values = c("Tight (τ=0.1)"    = "#0072B2",
+                                "Moderate (τ=0.3)" = "#009E73",
+                                "Loose (τ=100)"    = "#CC79A7")) +
+  scale_shape_manual(values = c("Tight (τ=0.1)"    = 17,
+                                "Moderate (τ=0.3)" = 18,
+                                "Loose (τ=100)"    = 19)) +
+  labs(title   = "Shrinkage Spectrum — Back-transformed to Original Scale",
+       subtitle = "Black circle = Truth  |  Orange square = Ridge GCV  |  Bands = 95% CI",
+       x = NULL, y = "Coefficient Estimate (original scale)") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+### Exercises
+
+------------------------------------------------------------------------
+
+**Q2.1** Run `loo_compare()` on the three models. Which $\tau$ does LOO prefer? Is the difference in ELPD larger than $2 \times$ SE, making it meaningful? How does the LOO-preferred $\tau$ compare to `tau_est` from Part 1?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   `loo_compare()` ranks models by ELPD (expected log predictive density). The top row is the best model; differences are relative to it.
+-   A difference smaller than $2 \times$ SE is not worth interpreting — the models are predicting essentially equally well.
+-   If the LOO scores are nearly identical, this is itself informative: the data cannot distinguish between the three priors for prediction purposes.
+:::
+
+------------------------------------------------------------------------
+
+**Q2.2** When two models have `elpd_diff` within $2 \times$ SE, which should you prefer — the more regularized model or the weak prior? Why?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   From a pure prediction standpoint, prefer the more regularized model. When two models predict equally well in LOO, the regularized one tends to be more stable on genuinely new data.
+-   The weak prior model is fitting noise that happened to be in your training data. Among models with equal predictive performance, prefer the simpler one (Occam's razor).
+-   The one exception: if you have strong subject-matter reasons to believe some coefficients are genuinely large and the tight prior is suppressing them — but you would see that in the coefficient plot.
+:::
+
+------------------------------------------------------------------------
+
+**Q2.3** Compare the coefficient plots across the three models and ridge. Which predictors change the most as $\tau$ decreases from 100 to 0.1? Are the large-signal predictors (X1, X2) robust to the choice of $\tau$?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   Predictors with small true coefficients (X13, X14, X15) should be most affected — tight priors shrink them hardest toward zero.
+-   Large-signal predictors (X1, X2) should be robust — the likelihood dominates the prior for those coefficients.
+-   If the LOO winner matches ridge closely, it confirms that GCV and Bayesian model comparison extract similar information from the data.
+:::
+
+------------------------------------------------------------------------
+
+**Q2.4** Add a fourth model using `tau = tau_est` from Part 1 (the GCV-implied value). Where does it rank in the LOO comparison? Does this confirm or challenge the idea that GCV and Bayesian model comparison agree?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+``` r
+fit_gcv <- brm(y ~ ., data = df_sim,
+               prior = c(prior(normal(0, tau_est), class = b),
+                         prior(exponential(1),     class = sigma)),
+               save_pars = save_pars(all = TRUE), ...)
+```
+
+-   If the GCV-tau model ranks at or near the top, both methods are selecting the same level of regularization from the data.
+-   This is the cleanest bridge between Parts 1 and 2: GCV picks a $\lambda$, and Bayesian LOO confirms it is a good choice.
+:::
+
+------------------------------------------------------------------------
+
+## Part 3 — Lasso and Horseshoe on the prostate Cancer Data
+
+### The Dataset
+
+The prostate cancer dataset (Stamey et al., 1989) was used by Tibshirani (1996) to introduce the lasso. It contains $n = 97$ patients about to receive a radical prostatectomy. The response is `lpsa` (log prostate specific antigen). OLS analysis suggests that `lcavol` and `svi` are clearly important, `lweight` is moderate, and `age`, `gleason`, `pgg45` are near-noise — exactly the partial sparsity structure where lasso and horseshoe outperform ridge.  The dataset can be found in the "genridge" package since the Elem. of Statistical Learning package is defunct.
+
+```{r}
+#| label: part3-data
+
+data(prostate, package = "genridge")
+
+# Standardize all predictors and response
+pros <- prostate |>
+  mutate(across(everything(), scale)) |>
+  mutate(across(everything(), as.numeric))
+
+# OLS as a reference point
+ols_pros <- lm(lpsa ~ ., data = pros)
+summary(ols_pros)
+```
+
+### Model Specifications
+
+**Ridge (baseline)**
+
+$$\beta_j \sim \mathcal{N}(0, \tau^2) \quad \text{[same penalty for all predictors]}$$
+
+Selected by GCV via `lm.ridge`. No mechanism for exact zeros — will retain `age`, `gleason`, `pgg45` at small but non-zero values.
+
+**Lasso — Double-Exponential prior**
+
+$$\beta_j \sim \text{DoubleExponential}(0, \tau) = \frac{1}{2\tau} \exp\!\left(-\frac{|\beta_j|}{\tau}\right)$$
+
+The MAP of this model solves $\min \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|^2 + (1/\tau)\|\boldsymbol{\beta}\|_1$ — the lasso with $\lambda = \sigma^2/\tau$. Sharp peak at zero encourages sparsity; all predictors are penalized equally.
+
+**Horseshoe — Adaptive shrinkage**
+
+$$\beta_j \mid \lambda_j, \tau \sim \mathcal{N}(0,\; \lambda_j^2 \tau^2)$$
+
+$$\lambda_j \sim \text{HalfCauchy}(0, 1) \quad \text{[local scale — per predictor]}$$
+
+$$\tau \sim \text{HalfCauchy}(0, \tau_0), \quad \tau_0 = \frac{p_0}{p - p_0} \cdot \frac{\sigma}{\sqrt{n}}$$
+
+where $p_0$ is your prior guess for the number of non-zero coefficients. Small $\lambda_j$ drives $\beta_j$ to zero (spike); large $\lambda_j$ lets $\beta_j$ escape shrinkage (slab). Each predictor gets its own shrinkage level — adaptive, unlike ridge or lasso.
+
+### Code
+
+```{r}
+#| label: part3-ridge
+
+# Ridge baseline on prostate
+ridge_pros  <- lm.ridge(lpsa ~ ., data = pros, lambda = seq(0, 5, by = 0.01))
+lambda_pros <- as.numeric(names(which.min(ridge_pros$GCV)))
+ridge_pros  <- lm.ridge(lpsa ~ ., data = pros, lambda = lambda_pros)
+ridge_beta_pros <- coef(ridge_pros)[-1]
+cat("prostate ridge lambda (GCV):", lambda_pros)
+```
+
+```{r}
+#| label: part3-lasso
+#| cache: true
+
+fit_lasso <- brm(
+  lpsa ~ .,
+  data  = pros,
+  prior = c(
+    set_prior("double_exponential(0, 1)", class = "b"),
+    set_prior("normal(0, 1)",             class = "Intercept"),
+    set_prior("exponential(1)",           class = "sigma")
+  ),
+  chains = 3, iter = 3000, warmup = 1000,
+  seed = 42, backend = "rstan", refresh = 0
+)
+```
+
+```{r}
+#| label: part3-horseshoe
+#| cache: true
+
+# par_ratio = p0 / (p - p0): prior guess that ~3 of 8 predictors are non-zero
+fit_hs <- brm(
+  lpsa ~ .,
+  data  = pros,
+  prior = c(
+    set_prior("horseshoe(df = 1, par_ratio = 0.6)", class = "b"),
+    set_prior("normal(0, 1)",                       class = "Intercept"),
+    set_prior("exponential(1)",                     class = "sigma")
+  ),
+  chains = 3, iter = 3000, warmup = 1000,
+  seed = 42, backend = "rstan", refresh = 0,
+  control = list(adapt_delta = 0.99)   # horseshoe needs higher adapt_delta
+)
+```
+
+```{r}
+#| label: part3-plot
+#| fig-width: 9
+#| fig-height: 6
+
+# Collect posterior means from all three methods
+fe_lasso <- fixef(fit_lasso)
+fe_hs    <- fixef(fit_hs)
+preds_p  <- colnames(pros)[colnames(pros) != "lpsa"]
+
+all_coefs <- bind_rows(
+  tibble(Predictor = preds_p, Estimate = ridge_beta_pros,              Method = "Ridge"),
+  tibble(Predictor = preds_p, Estimate = fe_lasso[preds_p, "Estimate"], Method = "Lasso"),
+  tibble(Predictor = preds_p, Estimate = fe_hs[preds_p,    "Estimate"], Method = "Horseshoe")
+)
+
+ggplot(all_coefs,
+       aes(x = reorder(Predictor, abs(Estimate)),
+           y = Estimate, color = Method, shape = Method)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_point(size = 3.5, position = position_dodge(0.5)) +
+  coord_flip() +
+  scale_color_manual(values = c(Ridge = "#1F4E79", Lasso = "#E65100",
+                                Horseshoe = "#5E35B1")) +
+  labs(title   = "Ridge vs Lasso vs Horseshoe — prostate Data",
+       subtitle = "Posterior means (lasso, horseshoe) and MAP (ridge)",
+       x = NULL, y = "Standardized coefficient") +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+```{r}
+#| label: part3-areas
+#| fig-width: 9
+#| fig-height: 5
+
+library(bayesplot)
+
+mcmc_areas(fit_lasso, pars = vars(starts_with("b_")), prob = 0.90) +
+  labs(title = "Lasso — posterior coefficient distributions (90% CI)")
+```
+
+```{r}
+#| label: part3-areas-hs
+#| fig-width: 9
+#| fig-height: 5
+
+mcmc_areas(fit_hs, pars = vars(starts_with("b_")), prob = 0.90) +
+  labs(title = "Horseshoe — posterior coefficient distributions (90% CI)")
+```
+
+### Exercises
+
+------------------------------------------------------------------------
+
+**Q3.1** Run OLS (`lm(lpsa ~ ., data = pros)`) and inspect the $t$-statistics. Which predictors appear important? Which are near-noise? Use this as your reference for evaluating what lasso and horseshoe should do.
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   `lcavol` and `svi` should have the largest $t$-statistics. `lweight` is moderate. `age`, `gleason`, `pgg45` are weakest.
+-   This is the "oracle" answer we would like the shrinkage methods to recover.
+-   Note the correlations: `lcp` is correlated with `lcavol` ($r \approx 0.68$). How might this affect lasso vs ridge vs horseshoe?
+:::
+
+------------------------------------------------------------------------
+
+**Q3.2** Compare the three methods in the coefficient plot. Which predictors does lasso shrink most aggressively? Does horseshoe agree with lasso on which predictors are near-zero? For predictors where they disagree, what property of each prior explains the difference?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   Lasso applies uniform shrinkage pressure (same $\tau$ for all). If two correlated predictors both matter, lasso may arbitrarily shrink one more than the other.
+-   Horseshoe uses per-predictor $\lambda_j$. A predictor with a large signal can have a large local scale and escape global shrinkage entirely.
+-   Look specifically at `lcp` — correlated with `lcavol`. Does lasso treat them similarly? Does horseshoe?
+:::
+
+------------------------------------------------------------------------
+
+**Q3.3** Plot the posterior distributions of all coefficients for lasso and horseshoe using `mcmc_areas()`. For a near-noise predictor (e.g. `age` or `gleason`), describe the shape of the posterior under each prior. What is qualitatively different about lasso vs horseshoe posterior shapes for small coefficients?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   Lasso posteriors for small coefficients are peaked near zero but still unimodal — the Laplace prior pulls toward zero but does not produce a spike-and-slab shape.
+-   Horseshoe posteriors for small coefficients often show a sharp spike at zero plus a very light tail — this is the spike-and-slab behavior emerging from the HalfCauchy local scales.
+-   For large coefficients (`lcavol`), both priors should produce posteriors that are largely uninhibited by the regularization.
+:::
+
+------------------------------------------------------------------------
+
+**Q3.4** Use `loo()` from the `loo` package to compare lasso and horseshoe by LOO. Which model predicts better out-of-sample? Is the difference larger than $2 \times$ SE?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+``` r
+library(loo)
+loo_lasso <- loo(fit_lasso)
+loo_hs    <- loo(fit_hs)
+loo_compare(loo_lasso, loo_hs)
+```
+
+-   With $n = 97$ and $p = 8$, both models may predict similarly — the dataset is not large enough to strongly discriminate.
+-   A difference in ELPD smaller than $2 \times$ SE is not meaningful. Report both the point estimate and the SE.
+:::
+
+------------------------------------------------------------------------
+
+**Q3.5** Sensitivity check: change `par_ratio` in the horseshoe from 0.6 (3 of 8 non-zero expected) to 0.2 (fewer non-zero expected) and refit. How do the posterior estimates for `lcavol` and `age` change? What does this tell you about how much the data vs the prior is driving the horseshoe results?
+
+::: {.callout-tip icon="false" collapse="true"}
+## Hint
+
+-   If `lcavol` barely changes but `age` changes substantially, the horseshoe is prior-sensitive for weak signals but not for strong ones.
+-   For $n = 97$ some prior sensitivity is expected for borderline predictors.
+-   This is a key practical lesson: for the horseshoe, the global scale prior (`par_ratio`) matters for borderline predictors, not for clearly strong or clearly zero ones.
+:::
+
+------------------------------------------------------------------------
+
+## Summary
+
+::: {.callout-important icon="false"}
+## Key Takeaways
+
+Every penalized regression method corresponds to a Bayesian model with a specific prior shape on the coefficients:
+
+| Prior shape                  | Tail behavior | Sparsity | Frequentist penalty |
+|-------------------------|---------------|---------------|-----------------|
+| $\mathcal{N}(0, \tau^2)$     | Light         | None     | L2 (ridge)          |
+| DoubleExponential$(0, \tau)$ | Heavier       | Moderate | L1 (lasso)          |
+| Horseshoe                    | Very heavy    | Strong   | No exact analogue   |
+
+-   The penalty parameter $\lambda$ is not a nuisance to be selected by CV — it encodes how strongly we believe coefficients should be small. GCV and Bayesian LOO comparison typically agree when the data are informative about $\lambda$.
+-   Full Bayesian inference adds honest uncertainty quantification: a flat LOO comparison across models means the data do not prefer any particular level of regularization, which a GCV point estimate would hide.
+-   The horseshoe prior is the state-of-the-art choice when sparsity is expected and the true number of signals is unknown. It allows large coefficients to escape shrinkage entirely while driving near-zero coefficients to the spike.
+:::
+
+------------------------------------------------------------------------
+
+*Applied Bayesian Methods — Day 1*
