@@ -6,7 +6,7 @@ This repository centralizes slides, exercises, and supporting scripts for the Ap
 
 | | |
 |---|---|
-| **Location** | AgroParisTech, 14 rue Girardet, Nancy |
+| **Location** | AgroParisTech, 14 rue Girardet, Nancy (Galerie Daubrée, room 1) |
 | **Dates** | 7–9 April 2026 |
 | **Registration deadline** | 30 March 2026 |
 | **Keywords** | Statistics, Modelling, Spatio-temporal, Mixed-effects, Ensemble approaches |
@@ -18,10 +18,8 @@ By the end of this course, participants will be able to:
 - Understand the Bayesian framework and its advantages
 - Specify, fit, and interpret hierarchical and mixed Bayesian models
 - Incorporate spatial and temporal dependencies into models
-- Evaluate, compare, and validate Bayesian models
 - Understand and apply ensemble modelling approaches
 - Apply Bayesian tools to their own research data
-- Report results transparently and reproducibly
 
 ## Programme
 
@@ -32,19 +30,19 @@ By the end of this course, participants will be able to:
 **Software:** R (`rstanarm`, `brms`)  
 **Instructor:** Alexander MASSEY → [`/Day1`](./Day1)
 
-### Day 2 — Space and Time in the Bayesian Framework
-- Space and time modelling concepts and approaches in the Bayesian framework
-- Fitting and evaluating models with explicit space and/or time components
-
-**Software:** R (INLA)  
-**Instructor:** Lionel HERTZOG → [`/Day2`](./Day2)
-
-### Day 3 — Ensemble Modelling and Bayesian Model Averaging
+### Day 2 — Ensemble Modelling and Bayesian Model Averaging
 - Introduction to ensemble modelling methods with a focus on Bayesian Model Averaging
 - Applying and evaluating Bayesian Model Averaging on real-world models
 
 **Software:** Python  
-**Instructor:** Nikola BESIC → [`/Day3`](./Day3)
+**Instructor:** Nikola BESIC → [`/Day2`](./Day2)
+
+### Day 3 — Space and Time in the Bayesian Framework
+- Space and time modelling concepts and approaches in the Bayesian framework
+- Fitting and evaluating models with explicit space and/or time components
+
+**Software:** R (INLA)  
+**Instructor:** Lionel HERTZOG → [`/Day3`](./Day3)
 
 ## Prerequisites
 
@@ -53,7 +51,7 @@ By the end of this course, participants will be able to:
 
 ## Teaching methods
 
-- Short presentations covering major conceptual knowledge
+- Short presentations covering basic conceptual knowledge
 - Simulated and real-world case studies
 - Live coding sessions (R and Python)
 - Hands-on practical work in small groups
@@ -61,8 +59,8 @@ By the end of this course, participants will be able to:
 ## Repository structure
 
 ```
-/day1/      # Day 1 slides, scripts, and exercises (R)
-/day2/      # Day 2 slides, scripts, and exercises (R / INLA)
-/day3/      # Day 3 slides, scripts, and exercises (Python)
+/day1/      # Day 1 slides and exercises (R)
+/day2/      # Day 2 slides, scripts, and exercises (Python)
+/day3/      # Day 3 slides, scripts, and exercises (Python)(R / INLA)
 README.md
 ```
