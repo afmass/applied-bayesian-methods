@@ -1,23 +1,24 @@
-# Day 3 — Bayesian Model Averaging (Python)
+# Day 2 — INLA and Spatiotemporal Models
 
-This folder contains materials for Day 3 of the Applied Bayesian Methods course. 
+This folder contains materials for Day 2 of the Applied Bayesian Methods course if you choose to add them here. If you want to maintain your own repo then just link it in this README. I just generated this README with AI as a possible template.
 
 ## Topics
 
-- Latent Gaussian Models as general framework
-- Temporal structure 
-- Spatial structure
+-   Integrated Nested Laplace Approximation (INLA)
+-   Spatiotemporal modelling with `R-INLA`
 
 ## Folder structure
 
+Add your slides, scripts, and data here. Suggested organisation:
 
-```
-day3/
+```         
+day2/
 ├── slides/
 ├── data/
 └── scripts/
 ```
 
-## Software and packages
+## Notes
 
-This materials requires R with **INLA** and **inlabru** to fit the models. Other needed packages include **tidyverse**, **DHARMa**, **spdep** and **sf**. 
+-   Please update this README with your preferred slide format and any package dependencies once known.
+-   Rendered output (e.g. `*.html`, `*_files/`) is gitignored at the repo level — do not force-add these.
