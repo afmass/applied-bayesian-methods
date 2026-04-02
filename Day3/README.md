@@ -1,4 +1,4 @@
-# Day 2 — INLA and Spatiotemporal Models
+# Day 3 — INLA and Spatiotemporal Models
 
 This folder contains materials for Day 2 of the Applied Bayesian Methods course if you choose to add them here. If you want to maintain your own repo then just link it in this README. I just generated this README with AI as a possible template.
 

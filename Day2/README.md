@@ -1,4 +1,4 @@
-# Day 3 — Bayesian Model Averaging (Python)
+# Day 2 — Bayesian Model Averaging (Python)
 
 This folder contains materials for Day 3 of the Applied Bayesian Methods course. 
 
