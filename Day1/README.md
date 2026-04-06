@@ -21,8 +21,7 @@ This folder contains all materials for Day 1 of the Applied Bayesian Methods cou
 ```         
 day1/
 ├── exercises/
-├── data/
-└── slides.qmd
+├── slides/
 ```
 
 ## Notes
