@@ -1,0 +1,791 @@
+---
+title: "Applied Bayesian Methods"
+subtitle: "***DAY 1:** Theoretical introduction and multi-level models*"
+author: "Alexander Massey"
+date: today
+date-format: "MMMM D, YYYY"
+# html-math-method: katex
+format:
+  revealjs:
+    embed-resources: true
+    theme: white
+    css: assets/custom.scss
+    slide-number: true
+    chalkboard: false
+    incremental: true
+    code-overflow: wrap
+    fontsize: 2em
+    title-slide-attributes:
+      data-background-image: ""
+    katex: TRUE
+include-after-body: assets/logo-inject.html
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+# What is Bayesian Inference? {background-color="#2c3e50"}
+
+## The core idea
+
+> "The approach is based upon the idea that the experimenter begins with some prior beliefs about the system, and then updates these beliefs on the basis of observed data."
+> — Gimenez (2025)
+
+. . .
+
+We want to answer: *how plausible is some hypothesis given the data?*
+
+$$\Pr(\text{hypothesis} \mid \text{data}) = \;?$$
+
+. . .
+
+The answer is **Bayes' theorem** — and it falls directly out of the definition of conditional probability
+
+---
+
+## Conditional Probability — A Reminder
+
+$\Pr(A \mid B)$ is the probability of $A$ **given that** $B$ has occurred
+
+. . .
+
+By definition:
+
+$$\Pr(A \mid B) = \frac{\Pr(A \cap B)}{\Pr(B)}$$
+
+. . .
+
+The same joint probability $\Pr(A \cap B)$ can be factored two ways:
+
+$$\Pr(A \cap B) = \Pr(B \mid A)\,\Pr(A) = \Pr(A \mid B)\,\Pr(B)$$
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+This symmetry is all we need — **Bayes' theorem is a direct consequence of these two factorisations being equal**
+:::
+
+---
+
+## Bayes' Theorem — Derived from First Principles
+
+Starting from the two factorisations of the joint probability:
+
+$$\Pr(B \mid A)\,\Pr(A) = \Pr(A \mid B)\,\Pr(B)$$
+
+. . .
+
+Divide both sides by $\Pr(B)$:
+
+$$\boxed{\Pr(A \mid B) = \frac{\Pr(B \mid A)\,\Pr(A)}{\Pr(B)}}$$
+
+. . .
+
+That is all it is. No new axioms — just rearranging the definition of conditional probability.
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+The ordering matters: $\Pr(A \mid B) \neq \Pr(B \mid A)$ in general — this asymmetry is exactly what makes the theorem useful
+:::
+
+
+# The Classic Example: Diagnostic Testing {background-color="#2c3e50"}
+
+## Setup
+
+*(Adapted from Held, Likelihood and Bayesian Inference)*
+
+A diagnostic test has **90% sensitivity** and **90% specificity**:
+
+$$\Pr(T^+ \mid D^+) = 0.9 \qquad \Pr(T^- \mid D^-) = 0.9$$
+
+- $T^+$: positive test result; $\quad D^+$: person has the disease
+- **Sensitivity**: the test correctly detects disease 90% of the time
+- **Specificity**: the test correctly rules out disease 90% of the time
+
+. . .
+
+Suppose disease **prevalence** is $\Pr(D^+) = 0.01$
+
+. . .
+
+**Question:** given a positive test, what is the probability of actually having the disease?
+
+$$\Pr(D^+ \mid T^+) = \;?$$
+
+---
+
+## Solution — Step by Step
+
+**Step 1.** Compute $\Pr(T^+)$ via the **law of total probability**:
+
+$$
+\Pr(T^+) =
+{\color{blue}{\Pr(T^+ \mid D^+)}}\,{\color{blue}{\Pr(D^+)}}
++
+{\color{red}{\Pr(T^+ \mid D^-)}}\,{\color{red}{\Pr(D^-)}}
+$$
+
+. . .
+
+$$
+= {\color{blue}{0.9 \times 0.01}}
++
+{\color{red}{(1 - 0.9) \times 0.99}}
+= 0.009 + 0.099 = 0.108
+$$
+
+. . .
+
+**Step 2.** Apply Bayes' theorem:
+
+$$\Pr(D^+ \mid T^+) = \frac{\Pr(T^+ \mid D^+)\,\Pr(D^+)}{\Pr(T^+)} = \frac{0.9 \times 0.01}{0.108} \approx \mathbf{0.083}$$
+
+. . .
+
+::: {.callout-important appearance="minimal"}
+A positive test raises disease probability **1.0% → 8.3%** — still low! When disease is rare, false positives from the large healthy population swamp true positives.
+:::
+
+---
+
+## Why the Result Feels Surprising
+
+The test has 90% accuracy in both directions. Yet only 1-in-12 positive tests reflects true disease.
+
+. . .
+
+**The numbers:**
+
+| | Has Disease ($D^+$) | No Disease ($D^-$) |
+|---|---|---|
+| Test positive ($T^+$) | $0.9 \times 0.01 = 0.009$ | $0.1 \times 0.99 = 0.099$ |
+| Test negative ($T^-$) | $0.1 \times 0.01 = 0.001$ | $0.9 \times 0.99 = 0.891$ |
+
+. . .
+
+::: {.callout-tip appearance="minimal"}
+**The Bayesian lesson:** the posterior $\Pr(D^+ \mid T^+)$ depends critically on the **prior** $\Pr(D^+)$. Ignore the prior and you get the wrong answer. This is not a statistical trick — it is basic probability.
+:::
+
+
+# From Events to Parameters {background-color="#2c3e50"}
+
+## Extending Bayes' Theorem to Statistical Models
+
+Replace discrete events with a **continuous parameter** $\theta$ and observed **data** $x$:
+
+$$A \to \theta \qquad B \to x$$
+
+. . .
+
+Bayes' theorem becomes:
+
+$$\underbrace{p(\theta \mid x)}_{\text{posterior}} = \frac{\underbrace{p(x \mid \theta)}_{\text{likelihood}} \;\underbrace{p(\theta)}_{\text{prior}}}{\underbrace{p(x)}_{\text{normalising constant}}}$$
+
+. . .
+
+The denominator marginalises over all possible $\theta$:
+
+$$p(x) = \int p(x \mid \theta)\,p(\theta)\,d\theta$$
+
+. . .
+
+::: {.callout-warning appearance="minimal"}
+This integral is the **central computational challenge** — often high-dimensional and analytically intractable. It motivates MCMC.
+:::
+
+---
+
+## The Three Components
+
+**Prior** $p(\theta)$
+
+- Encodes beliefs *before* seeing the data
+- Can be informative (domain knowledge) or weakly informative
+- Source of much philosophical debate — but unavoidable in any inference
+
+. . .
+
+**Likelihood** $p(x \mid \theta)$
+
+- Probability of the observed data as a function of $\theta$
+- The same object as in maximum likelihood estimation
+- The data enter exclusively through this term
+
+. . .
+
+**Posterior** $p(\theta \mid x)$
+
+- Updated belief *after* seeing the data; a full probability distribution over $\theta$
+- The basis for all Bayesian inference and decision-making
+
+---
+
+## The Proportionality Shortcut
+
+Since $p(x)$ does not depend on $\theta$, we often write:
+
+$$p(\theta \mid x) \propto p(x \mid \theta)\; p(\theta)$$
+
+$$\text{Posterior} \propto \text{Likelihood} \times \text{Prior}$$
+
+. . .
+
+> "The density function of the posterior distribution can be obtained through multiplication of the likelihood function and the density function of the prior distribution with subsequent normalisation."
+> — Held (2014)
+
+. . .
+
+We work with the un-normalised product and only divide by $p(x)$ at the end — and for **conjugate models** we never need to compute it explicitly at all.
+
+
+# A Detour: Maximum Likelihood Estimation {background-color="#2c3e50"}
+
+## The Likelihood — A Change of Perspective
+
+The term $p(x \mid \theta)$ appears inside Bayes' theorem. Before using it in a Bayesian analysis, it is worth understanding it on its own.
+
+. . .
+
+Normally we think of $p(x \mid \theta)$ as: *given the parameter, what data should we expect?*
+
+. . .
+
+**Flip the question.** We have observed $x$. Treat data as fixed and ask: *for which $\theta$ were these data most probable?*
+
+$$\mathscr{L}(\theta) = p(x \mid \theta) \qquad \text{(same formula, different interpretation)}$$
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+Same mathematical object — different conceptual role. As a **likelihood**, $\theta$ is the fixed but unknown variable of interest and $x$ is the observed realization of a random process repeated n times.
+:::
+
+---
+
+## Worked Example: Binomial Likelihood
+
+**Setup.** A female bird has $k = 3$ successful breeding attempts out of $N = 10$.
+
+Model: $Y \sim \text{Binomial}(N, p)$
+
+. . .
+
+**Likelihood function:**
+
+$$\mathscr{L}(p \mid k, N) = \binom{N}{k} p^k (1-p)^{N-k} = \binom{10}{3} p^3 (1-p)^7$$
+
+. . .
+
+Evaluate at a few candidate values:
+
+| $p$ | $\mathscr{L}(p)$ |
+|-----|-----------------|
+| 0.10 | 0.057 |
+| 0.25 | 0.250 |
+| 0.30 | 0.267 |
+| 0.90 | 0.000 |
+
+. . .
+
+The data are most compatible with $p$ near 0.3 — but we need calculus to confirm this.
+
+---
+
+## Deriving the MLE analytically
+
+We want $\hat{p} = \arg\max_p \; \mathscr{L}(p)$. Since $\log$ is monotone, maximising $\log \mathscr{L}$ is equivalent.
+
+$$\log \mathscr{L}(p) = \underbrace{\log\binom{N}{k}}_{\text{constant w.r.t. } p} + k\log p + (N-k)\log(1-p)$$
+
+. . .
+
+**Differentiate** with respect to $p$:
+
+$$\frac{d \log \mathscr{L}}{dp} = \frac{k}{p} - \frac{N - k}{1 - p}$$
+
+. . .
+
+**Set equal to zero:**
+
+$$\frac{k}{p} = \frac{N-k}{1-p} \implies k(1-p) = (N-k)\,p \implies k - kp = Np - kp$$
+
+. . .
+
+$$k = Np \implies \boxed{\hat{p}_{\text{MLE}} = \frac{k}{N} = \frac{3}{10} = 0.3}$$
+
+---
+
+## Verify: Second Derivative Confirms a Maximum
+
+$$\frac{d^2 \log \mathscr{L}}{dp^2} = -\frac{k}{p^2} - \frac{N-k}{(1-p)^2}$$
+
+. . .
+
+This is **strictly negative** for all $p \in (0,1)$, $k > 0$, $N > k$ — confirming the critical point is a global maximum.
+
+. . .
+
+The **observed Fisher information** quantifies curvature at the MLE:
+
+$$\mathscr{I}(\hat{p}) = -\frac{d^2 \log \mathscr{L}}{dp^2}\bigg|_{p=\hat{p}} = \frac{N}{\hat{p}(1-\hat{p})}$$
+
+. . .
+
+The MLE standard error follows as:
+
+$$\text{SE}(\hat{p}) = \frac{1}{\sqrt{\mathscr{I}(\hat{p})}} = \sqrt{\frac{\hat{p}(1-\hat{p})}{N}}$$
+
+---
+
+## MLE vs. Bayesian: A Comparison
+
+```{=html}
+<style>
+.compare-table th { background: #2c3e50; color: white; padding: 8px 14px; }
+.compare-table td { padding: 7px 14px; vertical-align: top; font-size: 0.85em; }
+.compare-table tr:nth-child(even) { background: #f4f4f4; }
+.compare-table { border-collapse: collapse; width: 100%; margin-top: 0.5em; }
+.tag-bad  { color: #c0392b; font-weight: bold; }
+.tag-good { color: #27ae60; font-weight: bold; }
+</style>
+<table class="compare-table">
+  <thead>
+    <tr>
+      <th>Property</th>
+      <th>MLE (Frequentist)</th>
+      <th>Bayesian</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Parameter view</strong></td>
+      <td>Fixed, unknown constant</td>
+      <td>Random variable with a distribution</td>
+    </tr>
+    <tr>
+      <td><strong>Inference output</strong></td>
+      <td>Point estimate + SE</td>
+      <td>Full posterior distribution</td>
+    </tr>
+    <tr>
+      <td><strong>Uncertainty interval</strong></td>
+      <td>Confidence interval (repeated-sampling)</td>
+      <td>Credible interval (direct probability)</td>
+    </tr>
+    <tr>
+      <td><strong>Consistency</strong></td>
+      <td><span class="tag-bad">Asymptotic only</span></td>
+      <td>Valid for any sample size</td>
+    </tr>
+    <tr>
+      <td><strong>Efficiency (Cramér-Rao)</strong></td>
+      <td><span class="tag-bad">Asymptotic only</span></td>
+      <td>Incorporates prior information</td>
+    </tr>
+    <tr>
+      <td><strong>Normality of estimator</strong></td>
+      <td><span class="tag-bad">Asymptotic only</span></td>
+      <td>Posterior shape follows the model</td>
+    </tr>
+    <tr>
+      <td><strong>p-values</strong></td>
+      <td><span class="tag-bad">Violates likelihood principle†</span></td>
+      <td>Not used; decisions from posterior</td>
+    </tr>
+    <tr>
+      <td><strong>Prior knowledge</strong></td>
+      <td>Not explicit</td>
+      <td><span class="tag-good">Formally encoded in prior</span></td>
+    </tr>
+    <tr>
+      <td><strong>Main cost</strong></td>
+      <td>Optimisation (usually fast)</td>
+      <td><span class="tag-bad">Computing normalising constant p(x) is hard!!!</span></td>
+    </tr>
+  </tbody>
+</table>
+<p style="font-size:0.72em; margin-top:0.6em;">
+† p-values condition on H_0 and integrate over <em>unobserved</em> hypothetical datasets,
+violating the <strong>likelihood principle</strong>: inference should depend only on the likelihood of what was actually observed.
+</p>
+```
+
+## Under a uniform prior, the posterior mode equals the MLE.
+
+
+# Posterior Summaries {background-color="#2c3e50"}
+
+## Summarising the Posterior
+
+Once we have $p(\theta \mid x)$, we extract summaries analogous to descriptive statistics
+
+. . .
+
+**Posterior mean** — minimises squared-error loss:
+$$E(\theta \mid x) = \int \theta \, f(\theta \mid x)\, d\theta$$
+
+**Posterior mode (MAP)** — minimises 0–1 loss:
+$$\text{Mode}(\theta \mid x) = \arg\max_\theta \; f(\theta \mid x)$$
+
+**Posterior median** — minimises absolute-error loss:
+$$\text{Med}(\theta \mid x) : \int_{-\infty}^{a} f(\theta \mid x)\, d\theta = 0.5$$
+
+---
+
+## Bayes Estimators and Loss Functions
+
+A **Bayes estimate** minimises expected posterior loss:
+
+$$\hat{\theta} = \arg\min_a \; E\bigl[\ell(a, \theta) \mid x\bigr] = \arg\min_a \int \ell(a, \theta)\, f(\theta \mid x)\, d\theta$$
+
+. . .
+
+| Loss function $\ell(a, \theta)$ | Bayes Estimate |
+|---|---|
+| Quadratic: $(a - \theta)^2$ | Posterior **mean** |
+| Absolute: $\lvert a - \theta \rvert$ | Posterior **median** |
+| 0–1: $\mathbf{1}(a \neq \theta)$ as $\varepsilon \to 0$ | Posterior **mode** (MAP) |
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+Choice of loss function should reflect the real cost of being wrong in your application — this is a scientific decision, not a statistical default
+:::
+
+---
+
+## Credible Intervals
+
+For $\gamma \in (0, 1)$, a $\gamma \times 100\%$ **credible interval** $[t_l, t_u]$ satisfies:
+
+$$\int_{t_l}^{t_u} f(\theta \mid x)\, d\theta = \gamma$$
+
+. . .
+
+::: columns
+::: {.column width="50%"}
+**Frequentist 95% CI**
+
+The interval is random — it varies across hypothetical experiments. In the long run, 95% of such intervals contain the true $\theta$. This particular interval either contains it or it doesn't.
+:::
+::: {.column width="50%"}
+**Bayesian 95% CrI**
+
+Given the observed data and prior, $\Pr(\theta \in [t_l, t_u] \mid x) = 0.95$. A direct probability statement about where $\theta$ lies.
+:::
+:::
+
+
+# Conjugate Priors {background-color="#2c3e50"}
+
+## Why Conjugate Priors?
+
+Recall: $p(x) = \int p(x \mid \theta)\, p(\theta)\, d\theta$ is often intractable.
+
+. . .
+
+**Conjugate priors** are a special case where the integral works out in closed form:
+
+> If the posterior $p(\theta \mid x)$ belongs to the same distributional family as the prior $p(\theta)$, the prior is **conjugate** to the likelihood.
+
+. . .
+
+Benefits:
+
+- We can analytically describe the posterior in closed-form including **update rules**
+
+---
+
+## The Beta-Binomial Model
+
+The canonical conjugate model for a proportion $p \in [0,1]$
+
+**Likelihood:**
+$$x \mid p \;\sim\; \text{Binomial}(n,\, p) \qquad \Rightarrow \qquad p(x \mid p) = \binom{n}{x} p^x (1-p)^{n-x}$$
+
+. . .
+
+**Prior:**
+$$p \;\sim\; \text{Beta}(\alpha, \beta) \qquad \Rightarrow \qquad p(p) \propto p^{\alpha-1}(1-p)^{\beta-1}$$
+
+. . .
+
+**Posterior** — multiply and collect powers of $p$:
+
+$$p(p \mid x) \propto \underbrace{p^x(1-p)^{n-x}}_{\text{likelihood}} \cdot \underbrace{p^{\alpha-1}(1-p)^{\beta-1}}_{\text{prior}} = p^{(\alpha+x)-1}(1-p)^{(\beta+n-x)-1}$$
+
+. . .
+
+$$\boxed{p \mid x \;\sim\; \text{Beta}(\alpha + x,\;\; \beta + n - x)}$$
+
+---
+
+## Beta-Binomial: Update Rules and Posterior Mean
+
+The update simply adds observed counts to the prior hyperparameters:
+
+$$\alpha_{\text{post}} = \alpha_{\text{prior}} + \underbrace{x}_{\text{successes}} \qquad \beta_{\text{post}} = \beta_{\text{prior}} + \underbrace{(n - x)}_{\text{failures}}$$
+
+. . .
+
+Think of $\alpha$ and $\beta$ as **pseudo-counts** of prior successes and failures.
+
+. . .
+
+**Posterior mean:**
+$$E(p \mid x) = \frac{\alpha + x}{\alpha + \beta + n}$$
+
+. . .
+
+This is a **weighted average** of the prior mean $\dfrac{\alpha}{\alpha+\beta}$ and the MLE $\dfrac{x}{n}$ — the prior pulls the estimate toward prior beliefs, especially when $n$ is small.
+
+---
+
+## The Beta Prior — Shape Intuition
+
+$$f(p \mid \alpha, \beta) \propto p^{\alpha - 1}(1 - p)^{\beta - 1}$$
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 9
+library(ggplot2)
+p_seq <- seq(0.001, 0.999, length.out = 500)
+params <- list(
+  list(a = 1,   b = 1,   lab = "Beta(1, 1) — Uniform (complete ignorance)"),
+  list(a = 2,   b = 2,   lab = "Beta(2, 2) — Symmetric, mild"),
+  list(a = 5,   b = 2,   lab = "Beta(5, 2) — Skewed toward high p"),
+  list(a = 0.5, b = 0.5, lab = "Beta(0.5, 0.5) — U-shaped (bimodal prior)")
+)
+df <- do.call(rbind, lapply(params, function(pr) {
+  data.frame(p = p_seq,
+             density = dbeta(p_seq, pr$a, pr$b),
+             shape   = pr$lab)
+}))
+ggplot(df, aes(p, density, colour = shape)) +
+  geom_line(linewidth = 1.1) +
+  scale_colour_brewer(palette = "Set1", name = NULL) +
+  labs(x = expression(theta), y = "Density") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 10))
+```
+
+::: {.callout-note appearance="minimal"}
+$\alpha = \beta = 1$ is the **uniform prior** — complete ignorance about $p$
+:::
+
+---
+
+## Beta-Binomial: Worked Example
+
+**Bird breeding:** $k = 3$ successes out of $N = 10$ attempts. Prior: $\text{Beta}(2, 2)$.
+
+. . .
+
+$$\text{Prior mean} = \frac{2}{2+2} = 0.500 \qquad \text{MLE} = \frac{3}{10} = 0.300$$
+
+. . .
+
+**Posterior:**
+$$p \mid x \;\sim\; \text{Beta}(2+3,\; 2+7) = \text{Beta}(5,\; 9)$$
+
+. . .
+
+$$\text{Posterior mean} = \frac{5}{5+9} = \frac{5}{14} \approx 0.357$$
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+The posterior sits **between** the prior mean and the MLE. With only $N = 10$ observations the prior still has influence — equivalent to 4 pseudo-observations of prior data.
+:::
+
+---
+
+## Prior Dominance and Data Accumulation
+
+*Watch how the posterior shifts as more coin flips arrive*
+
+------------------------------------------------------------------------
+
+*Simulate coin flips and watch the posterior update in real time.*
+
+::: ojs-two-col
+```{ojs}
+//| echo: false
+viewof priorParams = Inputs.form([
+  Inputs.range([0.5, 10], {value: 2, step: 0.5, label: "Prior α (Beta)"}),
+  Inputs.range([0.5, 10], {value: 2, step: 0.5, label: "Prior β (Beta)"})
+])
+
+viewof trueP = Inputs.range([0, 1], {value: 0.5, step: 0.05, label: "True p"})
+
+viewof coinData = {
+  let heads = 0
+  let total = 0
+
+  const flipBtn = html`<button style="margin:4px 8px 4px 0; padding:6px 14px; font-size:1em;">🪙 Flip Coin</button>`
+  const resetBtn = html`<button style="margin:4px 0; padding:6px 14px; font-size:1em;">↺ Reset</button>`
+  const status = html`<div style="margin-top:8px; font-size:0.95em;">Flips: 0 | Heads: 0</div>`
+  const container = html`<div>${flipBtn}${resetBtn}${status}</div>`
+
+  const dispatch = () => {
+    status.textContent = `Flips: ${total} | Heads: ${heads}`
+    container.value = { heads, total }
+    container.dispatchEvent(new CustomEvent("input"))
+  }
+
+  flipBtn.onclick = () => {
+    const flip = Math.random() < trueP ? 1 : 0
+    total += 1
+    heads += flip
+    dispatch()
+  }
+
+  resetBtn.onclick = () => {
+    heads = 0
+    total = 0
+    dispatch()
+  }
+
+  container.value = { heads, total }
+  return container
+}
+```
+
+```{ojs}
+//| echo: false
+prior_a = priorParams[0]
+prior_b = priorParams[1]
+n_obs   = coinData.total
+x_obs   = coinData.heads
+post_a  = prior_a + x_obs
+post_b  = prior_b + (n_obs - x_obs)
+theta   = Array.from({length: 300}, (_, i) => i / 299)
+
+function betaPDF(theta, a, b) {
+  function lgamma(x) {
+    const c = [76.18009172947146,-86.50532032941677,24.01409824083091,
+               -1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+    let y = x, tmp = x + 5.5;
+    tmp -= (x + 0.5) * Math.log(tmp);
+    let ser = 1.000000000190015;
+    for (let j = 0; j < 6; j++) ser += c[j] / ++y;
+    return -tmp + Math.log(2.5066282746310005 * ser / x);
+  }
+  const logB = lgamma(a) + lgamma(b) - lgamma(a + b);
+  return Math.exp((a - 1) * Math.log(theta) + (b - 1) * Math.log(1 - theta) - logB);
+}
+
+priorCurve = theta.slice(1, -1).map(t => ({theta: t, density: betaPDF(t, prior_a, prior_b), curve: "Prior"}))
+postCurve  = theta.slice(1, -1).map(t => ({theta: t, density: betaPDF(t, post_a,  post_b),  curve: "Posterior"}))
+allCurves  = [...priorCurve, ...postCurve]
+
+Plot.plot({
+  width: 600,
+  height: 600,
+  marginLeft: 50,
+  style: { fontSize: "24px" },
+  x: {label: "θ", domain: [0, 1], labelOffset: 36},
+  y: {label: "Density", nice: true},
+  color: {
+    legend: true,
+    domain: ["Prior", "Posterior"],
+    range: ["#7bafd4", "#e07b54"],
+    swatchWidth: 30,
+    swatchHeight: 18,
+    style: {fontSize: "18px"}
+  },
+  marks: [
+    Plot.lineY(allCurves, {x: "theta", y: "density", stroke: "curve", strokeWidth: 6.5}),
+    Plot.ruleY([0]),
+    Plot.ruleX([trueP], {stroke: "black", strokeWidth: 3, strokeDasharray: "6,4"}),
+    <!-- Plot.ruleX(n_obs > 0 ? [x_obs / n_obs] : [], {stroke: "steelblue", strokeWidth: 3, strokeDasharray: "6,4"}) -->
+  ],
+  caption: `Flips: ${n_obs}  |  Heads: ${x_obs}  |  Posterior: Beta(${post_a}, ${post_b})  |  Mean = ${(post_a / (post_a + post_b)).toFixed(3)}`
+})
+```
+:::
+
+------------------------------------------------------------------------
+
+## Key Takeaway: Prior vs. Likelihood Dominance
+
+With **large** $n$, the likelihood dominates:
+
+$$E(p \mid x) = \frac{\alpha + x}{\alpha + \beta + n} \;\xrightarrow{n \to \infty}\; \frac{x}{n} = \hat{p}_{\text{MLE}}$$
+
+. . .
+
+With **small** $n$, the prior matters:
+
+- Acts as a regulariser — shrinks the estimate toward prior beliefs
+- Equivalent to $\alpha + \beta$ additional pseudo-observations before collecting data
+
+. . .
+
+::: {.callout-tip appearance="minimal"}
+This is why **prior sensitivity analysis** is standard practice: vary the prior, check how much the posterior changes. Robust results = the data are doing the work.
+:::
+
+---
+
+## Common Conjugate Families
+
+| Likelihood | Parameter | Conjugate Prior | Posterior | Posterior Mean |
+|------------|----------|-----------------|-----------|----------------|
+| Binomial$(n, p)$ | $p$ | Beta$(\alpha, \beta)$ | Beta$(\alpha + x,\; \beta + n - x)$ | $\frac{\alpha + x}{\alpha + \beta + n}$ |
+| Poisson$(\lambda)$ | $\lambda$ | Gamma$(\alpha, \beta)$ | Gamma$(\alpha + \sum x_i,\; \beta + n)$ | $\frac{\alpha + \sum x_i}{\beta + n}$ |
+| Normal$(\mu, \sigma^2)$, $\sigma^2$ known | $\mu$ | Normal$(\mu_0, \tau_0^2)$ | Normal$(\mu_n, \tau_n^2)$ | Weighted avg of $\mu_0$ and $\bar{x}$ |
+| Normal$(\mu, \sigma^2)$, $\mu$ known | $\sigma^2$ | Inv-Gamma$(\alpha, \beta)$ | Inv-Gamma$\!\left(\alpha + \tfrac{n}{2},\; \beta + \tfrac{1}{2}\sum(x_i-\mu)^2\right)$ | $\frac{\beta + \tfrac{1}{2}\sum(x_i-\mu)^2}{\alpha + \tfrac{n}{2} - 1}$ |
+| Exponential$(\lambda)$ | $\lambda$ | Gamma$(\alpha, \beta)$ | Gamma$(\alpha + n,\; \beta + \sum x_i)$ | $\frac{\alpha + n}{\beta + \sum x_i}$ |
+| Multinomial$(n, \mathbf{p})$ | $\mathbf{p}$ | Dirichlet$(\boldsymbol{\alpha})$ | Dirichlet$(\boldsymbol{\alpha} + \mathbf{x})$ | $\frac{\alpha_k + x_k}{\sum_j \alpha_j + n}$ |
+| Neg. Binomial$(r, p)$ | $p$ | Beta$(\alpha, \beta)$ | Beta$(\alpha + nr,\; \beta + \sum x_i)$ | $\frac{\alpha + nr}{\alpha + \beta + nr + \sum x_i}$ |
+
+---
+
+## Limits of Conjugate Priors
+
+Conjugate families are analytically convenient but **not always appropriate**:
+
+- The prior family is chosen for mathematical convenience, not necessarily scientific reasons
+- Many likelihoods (logistic regression, multilevel models) have **no conjugate prior**
+- Real prior knowledge may not fit any standard parametric form
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+When conjugacy fails, we need to evaluate $p(x)$ numerically (**usually MCMC or LaPlace approximation**).
+:::
+
+
+# Summary {background-color="#2c3e50"}
+
+## What We Covered
+
+::: nonincremental
+1. **Bayes' theorem** — derived from the definition of conditional probability; not a new axiom
+2. **Diagnostic test** — how the prior (prevalence) determines the posterior; base-rate neglect
+3. **From events to parameters** — $p(\theta \mid x) \propto p(x \mid \theta)\, p(\theta)$; the normalising constant problem
+4. **Maximum likelihood** — full analytic derivation, Fisher information, R implementation with `optim()`
+5. **MLE vs. Bayesian** — asymptotic caveats, the likelihood principle, credible vs. confidence intervals
+6. **Posterior summaries** — mean, median, mode and their loss functions; credible intervals
+7. **Conjugate priors** — Beta-Binomial in detail; update rules; prior dominance; conjugate families table
+:::
+
+. . .
+
+**Next lecture:** When conjugacy fails → Markov Chain Monte Carlo (MCMC)
+
+---
+
+## References
+
+::: nonincremental
+- Held, L. & Sabanés Bové, D. (2014). *Applied Statistical Inference: Likelihood and Bayes*. Springer.
+- Gimenez, O. (2025). *Bayesian statistics with R*. [oliviergimenez.github.io/bayesian-stats-with-R](https://oliviergimenez.github.io/bayesian-stats-with-R/)
+:::
+

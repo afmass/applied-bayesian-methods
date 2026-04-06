@@ -1,0 +1,636 @@
+---
+title: "Exercise: Bayesian Multilevel Models"
+subtitle: "Pooling, Shrinkage, and Varying Intercepts with brms"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(brms)
+library(ggthemes)
+```
+
+## Overview
+
+Multilevel models — also called hierarchical or mixed-effects models — extend standard regression by allowing parameters to vary across groups. The key benefits are:
+
+- **Improved estimates for repeated or grouped sampling** (e.g., longitudinal data, repeated measures within subjects or tanks).
+- **Borrowing strength across groups**: small or noisy groups are regularized toward the population mean rather than estimated in isolation.
+- **Quantifying between-group variation**: the model explicitly estimates how much groups differ from one another.
+- **Avoiding the extremes of naive pooling**: complete pooling ignores group differences entirely; no pooling ignores the shared structure. Partial pooling is the principled middle ground.
+
+This exercise works through all three perspectives — complete pooling, no pooling, and partial pooling — using a classic ecological dataset. It is adapted from [A. Solomon Kurz's](https://bookdown.org/ajkurz/Statistical_Rethinking_recoded/index.html) recoding of McElreath's *Statistical Rethinking*.
+
+---
+
+## The Reed Frog Data
+
+The `reedfrogs` dataset from the `rethinking` package records a tank-level experiment on reed frog tadpole survival. Each row is one tank. The variables we need are:
+
+| Variable | Description |
+|----------|-------------|
+| `surv` | Number of survivors at end of experiment |
+| `density` | Initial number of tadpoles placed in the tank |
+| `propsurv` | Empirical survival proportion (`surv / density`) |
+| `pred`, `size` | Experimental treatments (predation, tadpole size) |
+
+The natural model for each tank is a binomial: out of `density` tadpoles, `surv` survive, with some tank-specific probability $p_i$.
+
+```{r}
+#| label: load-data
+library(rethinking)
+data(reedfrogs)
+d <- reedfrogs
+```
+
+```{r}
+#| label: detach-rethinking
+rm(reedfrogs)
+detach(package:rethinking, unload = TRUE)
+library(brms)
+```
+
+```{r}
+#| label: glimpse-data
+library(tidyverse)
+d %>% glimpse()
+```
+
+There are 48 tanks. We add an explicit integer tank index, which we will use as a grouping variable throughout.
+
+```{r}
+#| label: add-tank-index
+d <- d %>%
+  mutate(tank = 1:nrow(d))
+```
+
+> **Question 1.** How many tanks are in each experimental density group (small, medium, large)? Use `count()` or a quick `table()` call to find out. Are the groups balanced?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+Try `d %>% count(density)` or `table(d$density)`. You should find 12 tanks at each of the four density levels (10, 25, and 35 tadpoles per tank, plus a fourth level) — so the groups are balanced by design. Equal replication across conditions makes it straightforward to compare survival rates without confounding group size and group membership.
+:::
+
+---
+
+## Model 1: No Pooling (Tank-Level Intercepts)
+
+### Model specification
+
+The simplest approach treats each tank as entirely independent. We estimate a separate log-odds intercept $\alpha_{\text{tank}_i}$ for every tank, with no information shared across tanks. This is **no pooling**.
+
+$$
+\begin{align}
+\text{surv}_i &\sim \text{Binomial}(n_i,\, p_i) \\
+\text{logit}(p_i) &= \alpha_{\text{tank}_i} \\
+\alpha_{\text{tank}} &\sim \text{Normal}(0, 5)
+\end{align}
+$$
+
+where $n_i = \texttt{density}_i$. The prior $\text{Normal}(0, 5)$ on the log-odds scale is weakly informative: it allows survival probabilities anywhere from near 0 to near 1 without strong preference.
+
+### Prior predictive check
+
+Before fitting, it is good practice to simulate from the prior to verify that the priors produce plausible data. We use `sample_prior = "only"` to draw from the prior predictive distribution.
+
+```{r}
+#| label: b12.1-prior-fit
+#| output: false
+b12.1_prior <- 
+  brm(data = d, family = binomial,
+      surv | trials(density) ~ 0 + factor(tank),
+      prior(normal(0, 5), class = b),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 12,
+      sample_prior = "only")
+```
+
+```{r}
+#| label: b12.1-prior-check
+pp_check(b12.1_prior, ndraws = 50) +
+  labs(title = "Prior predictive check: no-pooling model",
+       subtitle = "Simulated survival counts under the prior only")
+```
+
+> **Question 2.** Do the prior predictive draws look plausible for a survival count? What would it mean if the prior predictive distribution placed most mass near 0 or near the maximum count?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+A `Normal(0, 5)` prior on the log-odds scale is very wide. On the probability scale, `plogis(c(-5, 0, 5))` gives roughly `c(0.007, 0.5, 0.993)`, so the prior allows survival probabilities near 0 or 1 with appreciable probability. If the prior predictive draws pile up near 0 or the maximum count, it suggests the prior is pulling the model toward extreme survival outcomes before seeing any data — which may or may not be scientifically reasonable. A good prior predictive distribution should cover the plausible range of outcomes without concentrating mass in obviously implausible regions.
+:::
+
+### Fitting the model
+
+```{r}
+#| label: fit-b12.1
+#| output: false
+b12.1 <- 
+  brm(data = d, family = binomial,
+      surv | trials(density) ~ 0 + factor(tank),
+      prior(normal(0, 5), class = b),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 12)
+```
+
+### Convergence checks
+
+Before interpreting results, we check MCMC convergence. The two standard diagnostics are:
+
+- **$\hat{R}$ (R-hat)**: compares within-chain to between-chain variance. Values very close to 1.00 (typically $< 1.01$) indicate the chains have mixed well and converged to the same distribution.
+- **Bulk and tail ESS (effective sample size)**: the number of effectively independent draws. Low ESS relative to the total number of iterations signals high autocorrelation. Aim for ESS $\gtrsim 400$ for reliable posterior summaries.
+
+```{r}
+#| label: b12.1-convergence
+# Summary includes Rhat and ESS for every parameter
+print(b12.1)
+```
+
+```{r}
+#| label: b12.1-trace
+# Trace plots for the first four tank intercepts
+plot(b12.1, variable = paste0("b_factortank", 1:4), ask = FALSE)
+```
+
+> **Question 3.** Inspect the $\hat{R}$ values and ESS reported in the summary. Are there any parameters you would be concerned about? What do well-mixed trace plots look like?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+In a well-behaved fit, all $\hat{R}$ values should be very close to 1.00 (the `brms` default warning threshold is 1.05, but aim for $< 1.01$). Bulk and tail ESS should both exceed 400 — ideally much higher for a model with only 48 tank parameters and a modest number of iterations. Well-mixed trace plots look like "fuzzy caterpillars": the chains should overlap and wander randomly around a stable mean with no visible trends, drifts, or one chain being stuck at a different level from the others.
+:::
+
+### Posterior predictive check
+
+```{r}
+#| label: b12.1-ppc
+pp_check(b12.1, ndraws = 50) +
+  labs(title = "Posterior predictive check: no-pooling model")
+```
+
+---
+
+## Model 2: Partial Pooling (Multilevel Varying Intercepts)
+
+### Model specification
+
+The multilevel alternative replaces the independent tank priors with a **shared population distribution** whose parameters are themselves estimated from the data. This is **partial pooling**.
+
+$$
+\begin{align}
+\text{surv}_i &\sim \text{Binomial}(n_i,\, p_i) \\
+\text{logit}(p_i) &= \alpha_{\text{tank}_i} \\
+\alpha_{\text{tank}} &\sim \text{Normal}(\alpha,\, \sigma) \\
+\alpha &\sim \text{Normal}(0, 1) \\
+\sigma &\sim \text{Half-Cauchy}(0, 1)
+\end{align}
+$$
+
+The key change: instead of a fixed prior on each $\alpha_{\text{tank}}$, the tank intercepts are drawn from a Normal distribution with mean $\alpha$ (the population-average log-odds of survival) and standard deviation $\sigma$ (the extent to which tanks vary). Both $\alpha$ and $\sigma$ are estimated from data — this is what makes the model *hierarchical*.
+
+The practical consequence is **shrinkage**: tank-level estimates are pulled toward the population mean, with the strength of shrinkage depending on how much data each tank has and how large $\sigma$ is estimated to be.
+
+In `brms`, the lme4-style syntax `(1 | tank)` specifies that the intercept varies by tank. The prior on `class = sd` controls the population standard deviation $\sigma$ and is **parameterized in the standard deviation metric** (not variance — note this, as some software uses the variance parameterization instead).
+
+### Prior predictive check
+
+```{r}
+#| label: b12.2-prior-fit
+#| output: false
+b12.2_prior <- 
+  brm(data = d, family = binomial,
+      surv | trials(density) ~ 1 + (1 | tank),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(cauchy(0, 1), class = sd)),
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      seed = 12,
+      sample_prior = "only")
+```
+
+```{r}
+#| label: b12.2-prior-check
+pp_check(b12.2_prior, ndraws = 50) +
+  labs(title = "Prior predictive check: partial-pooling model",
+       subtitle = "Simulated survival counts under the prior only")
+```
+
+> **Question 4.** Compare the prior predictive distributions of Model 1 and Model 2. The intercept prior is tighter in Model 2 (`Normal(0, 1)` vs `Normal(0, 5)`). What survival probabilities does `Normal(0, 1)` on the log-odds scale imply? (Hint: apply `plogis()` to $\pm 1$ and $\pm 2$.)
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+`plogis(c(-2, -1, 0, 1, 2))` gives approximately `c(0.12, 0.27, 0.50, 0.73, 0.88)`. So a `Normal(0, 1)` prior on the log-odds scale keeps most prior mass in the range of roughly 12%–88% survival probability — a much more modest and scientifically defensible prior than `Normal(0, 5)`, which spreads mass all the way to near 0 and near 1. The tighter prior in Model 2 is also partly justified because the multilevel structure itself provides regularization: the population mean $\alpha$ and variance $\sigma$ are estimated, so individual tank intercepts are already being pooled.
+:::
+
+### Fitting the model
+
+```{r}
+#| label: fit-b12.2
+#| output: false
+b12.2 <- 
+  brm(data = d, family = binomial,
+      surv | trials(density) ~ 1 + (1 | tank),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(cauchy(0, 1), class = sd)),
+      iter = 4000, warmup = 1000, chains = 4, cores = 4,
+      seed = 12)
+```
+
+### Convergence checks
+
+```{r}
+#| label: b12.2-convergence
+print(b12.2)
+```
+
+```{r}
+#| label: b12.2-trace
+# Trace plots for the population-level parameters
+plot(b12.2, variable = c("b_Intercept", "sd_tank__Intercept"), ask = FALSE)
+```
+
+> **Question 5.** The multilevel model estimates two population-level parameters: `b_Intercept` ($\alpha$) and `sd_tank__Intercept` ($\sigma$). What do these represent substantively? What does a large estimated $\sigma$ tell you about the tanks?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+`b_Intercept` ($\alpha$) is the **average log-odds of survival** across all tanks — the population mean on the link scale. Back-transforming with `plogis()` gives the average survival probability. `sd_tank__Intercept` ($\sigma$) is the **standard deviation of tank-level intercepts** around that mean — it quantifies how much tanks vary in their survival rates. A large $\sigma$ means tanks differ substantially from one another (heterogeneous survival), while a small $\sigma$ means tanks are similar and pooling is very beneficial. If $\sigma \approx 0$, the multilevel model collapses toward the complete-pooling solution.
+:::
+
+### Posterior predictive check
+
+```{r}
+#| label: b12.2-ppc
+pp_check(b12.2, ndraws = 50) +
+  labs(title = "Posterior predictive check: partial-pooling model")
+```
+
+::: {.callout-note}
+## Overthinking: Alternative prior for $\sigma$
+
+The Half-Cauchy prior on the standard deviation is a common weakly informative choice, but an **Exponential** prior is another popular option — it has lighter tails and keeps $\sigma$ away from implausibly large values. You can swap the prior using `update()`, which re-uses the compiled Stan model:
+
+```{r}
+#| label: b12.2e-fit
+#| output: false
+b12.2.e <- 
+  update(b12.2,
+         prior = c(prior(normal(0, 1), class = Intercept),
+                   prior(exponential(1), class = sd)))
+```
+
+```{r}
+#| label: b12.2e-print
+print(b12.2.e)
+```
+
+Compare the posterior for `sd_tank__Intercept` between `b12.2` and `b12.2.e`. In this dataset, does the choice of prior on $\sigma$ make much practical difference?
+:::
+
+---
+
+## Model Comparison: No Pooling vs. Partial Pooling
+
+We compare the two models using both WAIC and LOO-CV. Both are approximations to out-of-sample predictive accuracy, penalizing for model complexity. LOO-CV (via PSIS) is generally preferred as it is more robust, but WAIC is shown here for completeness.
+
+```{r}
+#| label: model-comparison
+b12.1 <- add_criterion(b12.1, c("waic", "loo"))
+b12.2 <- add_criterion(b12.2, c("waic", "loo"))
+
+# WAIC comparison
+w <- loo_compare(b12.1, b12.2, criterion = "waic")
+print(w, simplify = FALSE)
+
+# LOO comparison
+l <- loo_compare(b12.1, b12.2, criterion = "loo")
+print(l, simplify = FALSE)
+```
+
+> **Question 6.** Which model has better expected out-of-sample predictive accuracy? The `elpd_diff` column shows the difference in expected log predictive density (higher is better); the `se_diff` column is the standard error of that difference. Is the difference large relative to its uncertainty?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+The partial-pooling model (`b12.2`) will typically appear at the top of the `loo_compare()` output, meaning it has the higher elpd (better predictive accuracy). The no-pooling model (`b12.1`) has 48 free parameters — one per tank — and overfits, assigning too much confidence to each tank's observed proportion. The multilevel model regularizes those estimates and generalizes better. A useful rule of thumb: if `|elpd_diff| > 2 * se_diff`, the difference is meaningfully larger than its uncertainty. Check whether that holds here.
+:::
+
+---
+
+## Visualizing Shrinkage
+
+One of the most instructive things to plot is the **shrinkage** of tank-level estimates toward the population mean. We extract posterior medians for each tank from the multilevel model using `coef()`, which returns group-level estimates on the log-odds scale, then back-transform with `plogis()`.
+
+```{r}
+#| label: extract-posterior
+post <- as_draws_df(b12.2)
+
+post_mdn <- 
+  coef(b12.2, robust = TRUE)$tank[, , ] %>% 
+  as_tibble() %>% 
+  bind_cols(d) %>%
+  mutate(post_mdn = plogis(Estimate))
+
+post_mdn
+```
+
+```{r}
+#| label: shrinkage-plot
+post_mdn %>%
+  ggplot(aes(x = tank)) +
+  geom_hline(yintercept = plogis(median(post$b_Intercept)),
+             linetype = 2, linewidth = 1/4) +
+  geom_vline(xintercept = c(16.5, 32.5), linewidth = 1/4) +
+  geom_point(aes(y = propsurv), color = "orange2") +
+  geom_point(aes(y = post_mdn), shape = 1) +
+  coord_cartesian(ylim = c(0, 1)) +
+  scale_x_continuous(breaks = c(1, 16, 32, 48)) +
+  labs(title    = "Multilevel shrinkage!",
+       subtitle = "The empirical proportions are in orange while the model-\nimplied proportions are the black circles. The dashed line is\nthe model-implied average survival proportion.") +
+  annotate("text", x = c(8, 16 + 8, 32 + 8), y = 0, 
+           label = c("small tanks", "medium tanks", "large tanks")) +
+  theme_fivethirtyeight() +
+  theme(panel.grid = element_blank())
+```
+
+> **Question 7.** Look at the tanks where the orange and black points differ most. Are these tanks with many or few tadpoles? Why does shrinkage operate more strongly in smaller tanks?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+The largest discrepancies between empirical proportions (orange) and model-implied estimates (black circles) occur in the **small tanks** on the left of the plot. Small tanks have fewer tadpoles, so their observed proportions are based on little data and are therefore noisy. The multilevel model recognizes this: when a tank provides little information, the posterior for that tank's intercept is pulled strongly toward the population mean $\alpha$. Conversely, large tanks with many tadpoles provide so much data that their tank-specific estimates can be trusted and need little shrinkage. This is regularization in action — the model automatically applies more skepticism where data are weakest.
+:::
+
+---
+
+## The Population Distribution of Tank Intercepts
+
+The multilevel model implies a **population distribution** of log-odds intercepts. We can visualize this by drawing 100 posterior samples of $(\alpha, \sigma)$ and plotting the corresponding Normal distributions.
+
+```{r}
+#| label: population-distribution
+post %>% 
+  slice_sample(n = 100) %>% 
+  expand(nesting(`.draw`, b_Intercept, sd_tank__Intercept),
+         x = seq(from = -4, to = 5, length.out = 100)) %>% 
+  ggplot(aes(x = x, group = `.draw`)) +
+  geom_line(aes(y = dnorm(x, b_Intercept, sd_tank__Intercept)),
+            alpha = .2, color = "orange2") +
+  labs(title    = "Population survival distribution",
+       subtitle = "The Gaussians are on the log-odds scale.") +
+  scale_y_continuous(NULL, breaks = NULL) +
+  coord_cartesian(xlim = c(-3, 4)) + 
+  theme_fivethirtyeight() +
+  theme(plot.title    = element_text(size = 13),
+        plot.subtitle = element_text(size = 10))
+```
+
+We can also push the population distribution through the inverse-logit to obtain the **marginal distribution of survival probability** across all tanks.
+
+```{r}
+#| label: marginal-survival
+ggplot(data = post, 
+       aes(x = rnorm(n    = nrow(post), 
+                     mean = b_Intercept, 
+                     sd   = sd_tank__Intercept) %>% 
+             plogis())) +
+  geom_density(linewidth = 0, fill = "orange2") +
+  scale_y_continuous(NULL, breaks = NULL) +
+  ggtitle("Marginal probability of survival across tanks") +
+  theme_fivethirtyeight()
+```
+
+> **Question 8.** The population-level density is on the probability scale (0 to 1), not the log-odds scale. Why is it not symmetric? What feature of the logistic transformation causes this?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+The logistic (inverse-logit) function is nonlinear and S-shaped: it compresses the tails of the log-odds distribution and stretches the middle. A symmetric Normal distribution on the log-odds scale maps to a **skewed** distribution on the probability scale, because equal intervals on the log-odds scale correspond to unequal intervals on the probability scale near 0 and 1. If $\alpha > 0$ (which it is here, indicating above-50% average survival), the distribution of probabilities will be skewed left, with most mass concentrated above 0.5. You can verify this by simulating: `plogis(rnorm(1e5, mean = alpha_est, sd = sigma_est))` and plotting the result.
+:::
+
+---
+
+## Simulation Study: Comparing All Three Estimators
+
+So far we have compared no-pooling and partial-pooling on the reed frog data, where we do not know the true tank-level survival probabilities. To evaluate the estimators properly, we turn to **simulation**, where the truth is known by construction.
+
+### Data-generating process
+
+We simulate 60 ponds with varying initial densities, drawing true log-odds intercepts from a population distribution:
+
+$$
+\begin{align}
+\text{surv}_i &\sim \text{Binomial}(n_i,\, p_i) \\
+\text{logit}(p_i) &= \alpha_{\text{pond}_i} \\
+\alpha_{\text{pond}} &\sim \text{Normal}(\alpha,\, \sigma) \\
+\alpha &= 1.4, \quad \sigma = 1.5
+\end{align}
+$$
+
+```{r}
+#| label: simulate-ponds
+a       <-  1.4
+sigma   <-  1.5
+n_ponds <- 60
+
+set.seed(12)
+dsim <- 
+  tibble(pond   = 1:n_ponds,
+         ni     = rep(c(5, 10, 25, 35), each = n_ponds / 4) %>% as.integer(),
+         true_a = rnorm(n = n_ponds, mean = a, sd = sigma))
+
+dsim
+```
+
+The four pond sizes — tiny (5), small (10), medium (25), large (35) — let us examine how estimation error varies with sample size within a pond.
+
+### Simulate survivors
+
+```{r}
+#| label: simulate-survivors
+set.seed(12)
+dsim <-
+  dsim %>%
+  mutate(si = rbinom(n = n(), prob = plogis(true_a), size = ni))
+
+dsim
+```
+
+### No-pooling estimate: empirical proportions
+
+The no-pooling estimate for each pond is simply the observed proportion of survivors, $\hat{p}_i^{\text{nopool}} = s_i / n_i$. This uses only the data from that pond — no information is shared.
+
+```{r}
+#| label: nopool-estimate
+dsim <- dsim %>%
+  mutate(p_nopool = si / ni)
+```
+
+### Partial-pooling estimate: multilevel model
+
+```{r}
+#| label: fit-b12.3
+#| output: false
+b12.3 <- 
+  brm(data = dsim, family = binomial,
+      si | trials(ni) ~ 1 + (1 | pond),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(cauchy(0, 1), class = sd)),
+      iter = 10000, warmup = 1000, chains = 1, cores = 1,
+      seed = 12)
+```
+
+### Convergence checks
+
+With only one chain we cannot compute $\hat{R}$ in the usual between-chain sense, but we can inspect the trace and check ESS.
+
+```{r}
+#| label: b12.3-convergence
+print(b12.3)
+```
+
+$\hat{R}$ here is computed using rank-normalization within the single chain. Check also:
+
+```{r}
+#| label: b12.3-rhat
+# Extract Rhat values for all parameters
+rhat_vals <- rhat(b12.3)
+summary(rhat_vals)
+```
+
+::: {.callout-note}
+## What is $\hat{R}$?
+
+$\hat{R}$ (pronounced "R-hat") is the **potential scale reduction factor**. It compares the variance of draws *within* each chain to the variance *between* chains. If the chains have converged to the same distribution, these should be equal and $\hat{R} \approx 1$. Values above 1.01 are a warning sign; values above 1.05 are a serious concern. A single-chain $\hat{R}$ computed via rank-normalization can still detect non-stationarity within the chain.
+:::
+
+```{r}
+#| label: b12.3-sample
+# Inspect first and last few pond estimates
+coef(b12.3)$pond[c(1:2, 59:60), , ] %>% 
+  round(digits = 2)
+```
+
+### Posterior predictive check
+
+```{r}
+#| label: b12.3-ppc
+pp_check(b12.3, ndraws = 50) +
+  labs(title = "Posterior predictive check: partial-pooling model (simulated ponds)")
+```
+
+### Comparing estimator accuracy
+
+We now compute, for each pond, the absolute error of each estimator relative to the known true survival probability.
+
+```{r}
+#| label: compute-errors
+p_partpool <- 
+  coef(b12.3)$pond[, , ] %>% 
+  as_tibble() %>%
+  transmute(p_partpool = plogis(Estimate))
+
+dsim <- 
+  dsim %>%
+  bind_cols(p_partpool) %>% 
+  mutate(p_true         = plogis(true_a),
+         nopool_error   = abs(p_nopool   - p_true),
+         partpool_error = abs(p_partpool - p_true))
+
+dsim %>% glimpse()
+```
+
+```{r}
+#| label: error-plot
+dfline <- 
+  dsim %>%
+  select(ni, nopool_error, partpool_error) %>%
+  pivot_longer(-ni, names_to = "key", values_to = "value") %>%
+  group_by(key, ni) %>%
+  summarise(mean_error = mean(value), .groups = "drop") %>%
+  arrange(key, ni) %>%
+  mutate(x    = rep(c(1,  16, 31, 46), times = 2),
+         xend = rep(c(15, 30, 45, 60), times = 2))
+  
+dsim %>% 
+  ggplot(aes(x = pond)) +
+  geom_vline(xintercept = c(15.5, 30.5, 45.4), 
+             color = "white", linewidth = 2/3) +
+  geom_point(aes(y = nopool_error), color = "orange2") +
+  geom_point(aes(y = partpool_error), shape = 1) +
+  geom_segment(data = dfline, 
+               aes(x = x, xend = xend, 
+                   y = mean_error, yend = mean_error),
+               color = rep(c("orange2", "black"), each = 4),
+               linetype = rep(1:2, each = 4)) +
+  scale_x_continuous(breaks = c(1, 10, 20, 30, 40, 50, 60)) +
+  annotate("text", x = c(15 - 7.5, 30 - 7.5, 45 - 7.5, 60 - 7.5), y = .45, 
+           label = c("tiny (5)", "small (10)", "medium (25)", "large (35)")) +
+  labs(y        = "absolute error",
+       title    = "Estimate error by model type",
+       subtitle = "The horizontal axis displays pond number. The vertical axis measures\nthe absolute error in the predicted proportion of survivors, compared to\nthe true value used in the simulation. The higher the point, the worse\nthe estimate. No-pooling shown in orange. Partial pooling shown in black.\nThe orange and dashed black lines show the average error for each kind\nof estimate, across each initial density of tadpoles (pond size). Smaller\nponds produce more error, but the partial pooling estimates are better\non average, especially in smaller ponds.") +
+  theme_fivethirtyeight() +
+  theme(panel.grid    = element_blank(),
+        plot.subtitle = element_text(size = 10))
+```
+
+```{r}
+#| label: error-summary
+dsim %>%
+  select(ni, nopool_error, partpool_error) %>%
+  pivot_longer(-ni, names_to = "key", values_to = "value") %>%
+  group_by(key) %>%
+  summarise(mean_error   = mean(value)   %>% round(digits = 3),
+            median_error = median(value) %>% round(digits = 3))
+```
+
+> **Question 9.** Looking at the error plot, where does partial pooling gain the most over no pooling — in tiny ponds or large ponds? Why? State the intuition in terms of the amount of information each pond contributes.
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+Partial pooling gains the most in **tiny ponds** (5 tadpoles). With only 5 observations, the empirical proportion $s_i / n_i$ can only take values in $\{0, 0.2, 0.4, 0.6, 0.8, 1.0\}$ — a very coarse grid — and is highly sensitive to chance. The no-pooling estimate takes these noisy proportions at face value. The partial-pooling estimate instead draws the tiny-pond intercepts toward the population mean, which on average produces a better guess. In large ponds (35 tadpoles), the empirical proportion is already a reliable estimate, so the two estimators converge and neither is clearly better.
+:::
+
+> **Question 10.** (Synthesis) We never fit an explicit **complete-pooling** model to `dsim`, but we can think about what it would predict. A complete-pooling model would estimate a single survival probability for all ponds, ignoring pond identity entirely. How would you expect its errors to compare to the no-pooling and partial-pooling errors, especially for large ponds that happen to have very different true survival rates from the population mean?
+
+::: {.callout-tip collapse="true"}
+## Hint
+
+The complete-pooling model predicts the same survival probability for every pond — roughly `plogis(alpha)` $\approx$ `plogis(1.4)` $\approx$ 0.80. For ponds whose true $p_i$ is close to this value, complete pooling does well. But for ponds whose true survival rate is far from the mean — particularly **large ponds** where the truth is well-identified but happens to be extreme — complete pooling makes systematic errors that neither shrink with sample size nor adapt to the pond. No pooling and partial pooling both let each pond's estimate respond to its own data, so they will outperform complete pooling for these outlier ponds. In a sense, complete pooling is the mirror-image failure to no pooling: one ignores all group differences, the other ignores all shared structure.
+:::
+
+---
+
+## Summary
+
+| Estimator | Model | Information used |
+|-----------|-------|-----------------|
+| Complete pooling | Single intercept, no group variable | All data collapsed; ignores group differences |
+| No pooling | Separate intercept per group, independent priors | Only within-group data; ignores shared structure |
+| Partial pooling | Multilevel: intercepts drawn from a population distribution | Within-group data + population-level regularization |
+
+Partial pooling is generally preferable when: (i) groups share a common population, (ii) some groups have limited data, and (iii) you want calibrated uncertainty about group-level parameters. The multilevel model achieves this by treating group-level variation as a quantity to be estimated, not a fixed feature of the prior.

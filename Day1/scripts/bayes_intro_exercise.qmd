@@ -1,0 +1,375 @@
+---
+title: "Exercise: Introduction to the Bayesian Framework"
+subtitle: "Likelihoods and Priors"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+---
+
+## Background
+
+This exercise builds intuition for the three ingredients of Bayesian inference:
+
+1. **The likelihood** — how probable is the data under different parameter values?
+2. **The prior** — what do we believe before seeing the data?
+3. **The posterior** — how do we update our beliefs after seeing the data?
+
+We focus on the first two components here. A recurring theme is that choices which seem innocuous — a flat prior, an arbitrary starting value — can have substantial and sometimes surprising consequences.
+
+---
+
+## Part 1: Maximum Likelihood Estimation
+
+Before placing priors, it helps to understand what the likelihood surface looks like on its own. The **maximum likelihood estimate (MLE)** is the parameter value that makes the observed data most probable under the assumed model. In simple cases it has a closed form; in general, we find it numerically.
+
+### The Binomial likelihood: bird breeding
+
+A field ecologist observes **3 successful breeding attempts out of 10** tries ($k = 3$, $N = 10$). We model the number of successes as $k \sim \text{Binomial}(N, p)$ and want to estimate the breeding success probability $p$.
+
+The log-likelihood is:
+
+$$\ell(p) = \log \binom{N}{k} + k \log p + (N - k) \log(1 - p)$$
+
+The MLE is analytically $\hat{p} = k/N = 0.3$, but we will find it numerically using `optim()`.
+
+```{r binomial-loglik}
+library(ggplot2)
+
+# Log-likelihood for Binomial(N = 10, p) with k = 3 successes
+loglik <- function(p, k = 3, N = 10) {
+  dbinom(x = k, size = N, prob = p, log = TRUE)
+}
+
+# Numerical MLE via optim() — minimise the NEGATIVE log-likelihood
+fit <- optim(
+  par    = 0.5,
+  fn     = function(p) -loglik(p),
+  method = "Brent",          # 1-D bounded optimiser
+  lower  = 1e-6,
+  upper  = 1 - 1e-6
+)
+mle <- fit$par
+
+# Plot the log-likelihood surface
+p_grid <- seq(0.001, 0.999, length.out = 500)
+df <- data.frame(p = p_grid, ll = sapply(p_grid, loglik))
+
+ggplot(df, aes(p, ll)) +
+  geom_line(colour = "#2c3e50", linewidth = 1.2) +
+  geom_vline(xintercept = mle, colour = "#e07b54",
+             linewidth = 1, linetype = "dashed") +
+  annotate("text", x = mle + 0.05, y = min(df$ll) + 0.8,
+           label = paste0("MLE = ", round(mle, 3)),
+           colour = "#e07b54", size = 5) +
+  labs(x = "p", y = "Log-likelihood",
+       title = "Binomial log-likelihood:  k = 3,  N = 10") +
+  theme_minimal(base_size = 14)
+```
+
+**Questions:**
+
+a. Change the data to $k = 0$ successes. What is the MLE? Plot the log-likelihood. What does this imply about using the MLE as a point estimate in small samples with extreme outcomes — and how does a Bayesian prior help?
+b. The log-likelihood is quite flat over a wide range of $p$. What does this tell you about the **information content** of $N = 10$ observations?  What happens if we increase $N$ to 100 (keeping $\hat{p} = 0.3$, so $k = 30$) and replot. How does the surface change?
+
+::: {.callout-tip collapse="true"}
+## Hint 1a — Zero successes
+```r
+loglik_0 <- function(p) dbinom(x = 0, size = 10, prob = p, log = TRUE)
+fit_0 <- optim(par = 0.5, fn = function(p) -loglik_0(p),
+               method = "Brent", lower = 1e-6, upper = 1 - 1e-6)
+fit_0$par   # → near 0
+```
+The MLE is $\hat{p} = 0$ — the model assigns zero probability to ever observing a success. A Beta(1,1) or weakly informative prior immediately regularises this toward the interior of $[0,1]$.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 1b — Larger sample
+```r
+loglik_large <- function(p) dbinom(x = 30, size = 100, prob = p, log = T)
+loglik_small <- function(p) dbinom(x = 3, size = 10, prob = p, log = T)
+p_grid <- seq(0.001, 0.999, length.out = 500)
+df_large <- data.frame(p = p_grid, ll = sapply(p_grid, loglik_large))
+df_small <- data.frame(p = p_grid, ll = sapply(p_grid, loglik_small))
+ggplot(df_large, aes(p, ll)) + geom_line(color = "blue") +
+ geom_line(data = df_small, color = "red") + theme_minimal()
+```
+The surface becomes much sharper (more peaked) around 0.3 — the data are more informative, leaving less posterior uncertainty regardless of the prior.
+:::
+
+---
+
+### MLE for a Normal distribution
+
+We now work with a two-parameter model. Suppose we have collected heights (in cm) from 100 individuals. We assume $\text{height}_i \sim \mathcal{N}(\mu, \sigma^2)$ and want to find the MLEs of $\mu$ and $\sigma$ numerically.
+
+The log-likelihood is:
+
+$$\ell(\mu, \sigma) = -\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum_{i=1}^n (x_i - \mu)^2$$
+
+The MLEs are analytically $\hat{\mu} = \bar{x}$ and $\hat{\sigma} = \sqrt{\frac{1}{n}\sum(x_i - \bar{x})^2}$, but `optim()` finds them in the same framework we will use for models without closed forms.
+
+```{r normal-mle}
+set.seed(2020)
+n      <- 100
+height <- rnorm(n, mean = 170, sd = 10)
+
+# Negative log-likelihood for Normal(mu, sigma)
+negloglik <- function(theta, data) {
+  mu    <- theta[1]
+  sigma <- theta[2]
+  -sum(dnorm(data, mean = mu, sd = sigma, log = TRUE))
+}
+
+# Check at an arbitrary starting point
+negloglik(theta = c(150, 1), height)
+
+# Optimise jointly over (mu, sigma)
+fit <- optim(
+  par = c(mean(height), sd(height)),   # sensible starting values
+  fn  = negloglik,
+  data = height
+)
+fit$par   # should recover ~ (170, 10)
+```
+
+**Questions:**
+
+a. Run `optim()` with the deliberately bad starting values `par = c(150, 1)`. Does it still converge to the correct MLEs? Now try `par = c(0, 0.001)`. What goes wrong, and why?
+b. Compare `fit$par` to `c(mean(height), sd(height))`. Are they identical? The MLE for $\sigma$ is the *biased* population standard deviation $\hat{\sigma} = \sqrt{\frac{1}{n}\sum(x_i - \bar{x})^2}$, not R's `sd()` which uses $n-1$. Is the difference meaningful here at $n = 100$?
+
+::: {.callout-tip collapse="true"}
+## Hint 2a — Bad starting values
+`sigma = 0.001` causes `dnorm()` to return `-Inf` for most observations (essentially assigning zero density to data far from the mean). `optim()` cannot compute a gradient and fails. This illustrates that numerical optimisers are sensitive to the scale of the parameter space — a practical reason to work on the log scale for variance parameters.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 2b
+The MLE is consistent but not guaranteed to be unbiased. Using $n-1$ corrects this bias so it should be larger.
+:::
+
+
+---
+
+## Part 2: The Pitfalls of Flat Priors
+
+A **flat (uniform) prior** over a parameter expresses "complete ignorance" — every value is equally plausible before seeing data. This sounds reasonable but causes two related problems:
+
+1. **It is not invariant to reparameterisation.** A flat prior on $p$ is *not* flat on $\log(p/(1-p))$ — the model "knows" more than we think it does.
+2. **It might place substantial mass in implausible regions**, especially on unbounded or transformed scales.
+
+### Flat priors on a probability scale
+
+Consider the logistic regression model for binary survival $\phi_i$:
+
+$$\text{logit}(\phi_i) = \beta_0 + \beta_1 x_i, \qquad \beta_0, \beta_1 \sim \mathcal{N}(0, \tau^2)$$
+
+The prior on $\phi_i = \text{logit}^{-1}(\beta_0 + \beta_1 x_i)$ depends critically on $\tau$.
+
+```{r flat-prior-logistic}
+set.seed(42)
+n_sim <- 10000
+
+# "Flat" prior on the logit scale — large variance
+beta_flat <- rnorm(n_sim, 0, 10)
+phi_flat  <- plogis(beta_flat)   # back-transform to probability scale
+
+# Weakly informative prior
+beta_weak <- rnorm(n_sim, 0, 1.5)
+phi_weak  <- plogis(beta_weak)
+
+par(mfrow = c(1, 2))
+plot(density(phi_flat, from = 0, to = 1),
+     main = expression(beta ~ "~ N(0, 10²)"),
+     xlab = "Survival probability", ylim = c(0, 8))
+plot(density(phi_weak, from = 0, to = 1),
+     main = expression(beta ~ "~ N(0, 1.5²)"),
+     xlab = "Survival probability", ylim = c(0, 8))
+par(mfrow = c(1, 1))
+```
+
+**Questions:**
+
+a. Describe the shape of the implied prior on $\phi$ when $\beta \sim \mathcal{N}(0, 10^2)$. Is this really "non-informative"? What claim does this prior make?
+b. How does the implied prior change with $\mathcal{N}(0, 1.5^2)$? Is this more or less informative in the logit space? Why is it *more appropriate* despite being "informative"?
+c. Try $\tau = 0.5$ and $\tau = 5$. Describe the trade-off. Is there a value of $\tau$ you would defend for a survival probability in ecology?
+
+::: {.callout-tip collapse="true"}
+## Hint 3a
+$\mathcal{N}(0, 10^2)$ on the logit scale concentrates mass near 0 and 1 on the probability scale — it is actually *highly* informative, favouring extreme survival probabilities. This is the opposite of what "non-informative" should mean for a bounded probability.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 3b
+$\mathcal{N}(0, 1.5^2)$ on the logit scale maps to an approximately uniform distribution on the probability scale — it is diffuse where it matters (on the constrained $[0,1]$ space) and avoids the pathological spike at the boundaries. Informativeness is always relative to the parameterisation.
+:::
+
+### Flat priors in linear regression
+
+A flat prior on regression coefficients — $\beta \sim \mathcal{N}(0, 100^2)$ — is similarly deceptive when predictors are on a natural scale.  Consider a standardized predictor's influence on human height.
+
+```{r flat-prior-regression}
+set.seed(42)
+n_sim <- 10000
+
+# "Flat" prior: beta ~ N(0, 100^2) on a standardised predictor
+beta_flat_lm <- rnorm(n_sim, 0, 100)
+
+# Weakly informative prior: beta ~ N(0, 1^2)
+beta_weak_lm <- rnorm(n_sim, 2, 0.5)
+
+par(mfrow = c(1, 2))
+hist(beta_flat_lm, breaks = 60, main = expression(beta ~ "~ N(0, 100²)"),
+     xlab = expression(beta), freq = FALSE, col = "#b0c4de")
+hist(beta_weak_lm, breaks = 60, main = expression(beta ~ "~ N(0, 1²)"),
+     xlab = expression(beta), freq = FALSE, col = "#90c4a8")
+par(mfrow = c(1, 1))
+```
+
+**Questions:**
+
+a. Why is the "flat" prior unreasonable?
+
+
+::: {.callout-tip collapse="true"}
+## Hint 4a
+It could easily produce negative heights!  You would really have to trust your data to not have outliers or measurement error because those impossible values are permissible under the prior. 
+:::
+
+---
+
+## Part 3: Eliciting a Prior via Method of Moments
+
+When external information is available — from published studies, expert knowledge, or pilot data — we should incorporate it into the prior rather than defaulting to flatness. **Method of moments** is a simple, transparent way to translate summary statistics (mean and variance) into the parameters of a prior distribution.
+
+### The Beta distribution and moment matching
+
+We are modelling a detection probability $p$ in a capture-recapture study. From the literature, we believe:
+
+- **Prior mean:** $\mu = 0.57$ (detection is reasonably high)
+- **Prior variance:** $\sigma^2 = 0.073^2 = 0.005329$ (moderate uncertainty)
+
+We want a $\text{Beta}(\alpha, \beta)$ prior consistent with these moments. Recall that for the Beta distribution:
+
+$$\mu = \frac{\alpha}{\alpha + \beta}, \qquad \sigma^2 = \frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$$
+
+**Questions:**
+
+a. Solve analytically for $\alpha$ and $\beta$ in terms of $\mu$ and $\sigma^2$. Show your algebra — express $\alpha + \beta$ first (sometimes called the *concentration* or *precision* $\kappa$), then recover $\alpha$ and $\beta$.
+b. Implement your solution in R and compute the numerical values of $\alpha$ and $\beta$.
+c. Verify your answer by simulation: draw 50 000 samples from $\text{Beta}(\hat{\alpha}, \hat{\beta})$ and check that the sample mean and variance match the target moments.
+
+::: {.callout-tip collapse="true"}
+## Hint 5a — Algebra
+From the mean equation: $\alpha = \mu(\alpha + \beta)$, so $\beta = \alpha(1-\mu)/\mu$.
+
+Substitute into the variance equation. After simplification:
+
+$$\alpha + \beta = \frac{\mu(1-\mu)}{\sigma^2} - 1$$
+
+Let $\kappa = \alpha + \beta$. Then $\alpha = \kappa\mu$ and $\beta = \kappa(1 - \mu)$.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 5b — R implementation
+```r
+mu    <- 0.57
+sigma2 <- 0.073^2
+
+kappa <- mu * (1 - mu) / sigma2 - 1
+alpha <- kappa * mu
+beta  <- kappa * (1 - mu)
+
+cat("alpha =", round(alpha, 2), "\nbeta  =", round(beta,  2))
+```
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 5c — Simulation check
+```r
+set.seed(123)
+sims <- rbeta(50000, shape1 = alpha, shape2 = beta)
+
+cat("Simulated mean:", round(mean(sims), 4),   "  Target:", mu,     "\n")
+cat("Simulated var: ", round(var(sims),  6),   "  Target:", sigma2, "\n")
+
+# Visualise
+plot(density(sims), main = "Beta prior via moment matching",
+     xlab = "Detection probability p")
+abline(v = mu, col = "firebrick", lty = 2, lwd = 2)
+```
+:::
+
+### Sensitivity to the prior
+
+Once you have an informed prior, it is good practice to check how sensitive your conclusions are to reasonable perturbations of it.
+
+**Questions:**
+
+a. Construct two alternative priors: one **more diffuse** ($\sigma^2 = 0.15^2$) and one **more concentrated** ($\sigma^2 = 0.03^2$), both centred at $\mu = 0.57$. Compute and plot all three Beta priors on the same axes.
+b. Suppose you observe $k = 8$ detections in $N = 20$ trials. The posterior is $\text{Beta}(\alpha + k,\; \beta + N - k)$. Compute and plot the three posteriors. How much does the choice of prior matter here?
+
+::: {.callout-tip collapse="true"}
+## Hint 6a — Three priors
+```r
+mu <- 0.57;  k <- 8;  N <- 20
+
+make_beta_params <- function(mu, sigma2) {
+  kappa <- mu * (1 - mu) / sigma2 - 1
+  c(alpha = kappa * mu, beta = kappa * (1 - mu))
+}
+
+p1 <- make_beta_params(mu, 0.073^2)   # informed
+p2 <- make_beta_params(mu, 0.15^2)    # diffuse
+p3 <- make_beta_params(mu, 0.03^2)    # concentrated
+
+p_grid <- seq(0.001, 0.999, length.out = 500)
+plot(p_grid, dbeta(p_grid, p1["alpha"], p1["beta"]),
+     type = "l", col = "#2c7bb6", lwd = 2,
+     xlab = "p", ylab = "Density", main = "Three Beta priors")
+lines(p_grid, dbeta(p_grid, p2["alpha"], p2["beta"]), col = "#d7191c", lwd = 2)
+lines(p_grid, dbeta(p_grid, p3["alpha"], p3["beta"]), col = "#1a9641", lwd = 2)
+legend("topleft", legend = c("Informed", "Diffuse", "Concentrated"),
+       col = c("#2c7bb6", "#d7191c", "#1a9641"), lwd = 2)
+```
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 6b — Posteriors
+```r
+# Posterior = Beta(alpha + k, beta + N - k)
+plot(p_grid, dbeta(p_grid, p1["alpha"] + k, p1["beta"] + N - k),
+     type = "l", col = "#2c7bb6", lwd = 2,
+     xlab = "p", ylab = "Density", main = "Posteriors after 8/20 detections")
+lines(p_grid, dbeta(p_grid, p2["alpha"] + k, p2["beta"] + N - k),
+      col = "#d7191c", lwd = 2)
+lines(p_grid, dbeta(p_grid, p3["alpha"] + k, p3["beta"] + N - k),
+      col = "#1a9641", lwd = 2)
+legend("topleft", legend = c("Informed", "Diffuse", "Concentrated"),
+       col = c("#2c7bb6", "#d7191c", "#1a9641"), lwd = 2)
+```
+With $N = 20$ observations, the data dominate and the three posteriors should be nearly identical. Repeat with $N = 5$ to see prior sensitivity increase.
+:::
+
+---
+
+## References
+
+Gimenez, O. (2025). *Bayesian statistics with R*. Lecture slides, November–December 2025. <https://oliviergimenez.github.io/bayesian-stats-with-R/>

@@ -1,0 +1,416 @@
+---
+title: "Exercise: Markov Chain Monte Carlo"
+subtitle: "Intuition, Implementation, and Diagnostics"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+---
+
+## Background
+
+In Bayesian inference, the posterior distribution is:
+
+$$P(\theta \mid \text{data}) = \frac{P(\text{data} \mid \theta)\, P(\theta)}{P(\text{data})}$$
+
+The denominator $P(\text{data}) = \int P(\text{data} \mid \theta)\, P(\theta)\, d\theta$ is a high-dimensional integral that is analytically intractable in most real models. **Markov Chain Monte Carlo (MCMC)** sidesteps this problem entirely: instead of computing the posterior analytically, we *simulate a random walk* through the parameter space that — in the long run — visits each region in proportion to its posterior probability.
+
+The key insight is that the normalising constant $P(\text{data})$ **cancels** when we take ratios of posterior densities, which is exactly what MCMC algorithms exploit.
+
+------------------------------------------------------------------------
+
+## The Coypus Example
+
+We will work throughout with a simple survival estimation problem. In a winter study, **19 out of 57 coypus** survived. We want to estimate the survival probability $\theta$.
+
+-   **Likelihood:** $y \mid \theta \sim \text{Binomial}(57,\, \theta)$
+-   **Prior:** $\theta \sim \text{Uniform}(0, 1)$ (a flat, non-informative prior)
+-   **Posterior:** $\theta \mid y \sim \text{Beta}(20, 39)$ (analytically available here — useful for checking)
+
+Because this is a one-parameter model, the posterior is tractable. We use it to build intuition for MCMC before scaling to problems where the integral is unavailable.
+
+------------------------------------------------------------------------
+
+## Setting Up the Model in R
+
+The three building blocks of any MCMC sampler are the **log-likelihood**, the **log-prior**, and the **log-posterior**. We work on the log scale throughout for numerical stability.
+
+```{r setup-functions}
+# Coypus data
+survived <- 19
+released <- 57
+
+# Log-likelihood: Binomial
+loglikelihood <- function(x, p) {
+  dbinom(x = x, size = released, prob = p, log = TRUE)
+}
+
+# Log-prior: Uniform(0, 1)
+logprior <- function(p) {
+  dunif(x = p, min = 0, max = 1, log = TRUE)
+}
+
+# Log-posterior (unnormalised — the denominator cancels later)
+posterior <- function(x, p) {
+  loglikelihood(x, p) + logprior(p)
+}
+```
+
+::: callout-note
+We never need to compute $P(\text{data})$ — it disappears when we take the **ratio** of posteriors at two candidate locations.
+:::
+
+------------------------------------------------------------------------
+
+## The Metropolis Algorithm
+
+The Metropolis algorithm constructs a Markov chain whose stationary distribution equals the target posterior. At each step:
+
+1.  **Start** at any valid parameter value $\theta_0$.
+2.  **Propose** a candidate $\theta^* = \text{logit}^{-1}(\text{logit}(\theta_{t-1}) + \varepsilon)$, where $\varepsilon \sim \mathcal{N}(0, \sigma^2)$. Proposing on the logit scale keeps candidates inside $(0,1)$.
+3.  **Compute** the acceptance ratio $R = \frac{P(\theta^* \mid y)}{P(\theta_{t-1} \mid y)}$. Because $P(\text{data})$ is identical in numerator and denominator, it cancels — this is the magic.
+4.  **Accept** $\theta^*$ with probability $\min(R, 1)$; otherwise stay at $\theta_{t-1}$.
+5.  **Repeat** steps 2–4 for many iterations.
+
+```{r metropolis-setup}
+# Proposal function: random walk on logit scale
+move <- function(x, away = 0.2) {
+  logitx         <- log(x / (1 - x))
+  logit_candidate <- logitx + rnorm(1, 0, away)
+  candidate      <- plogis(logit_candidate)
+  return(candidate)
+}
+
+# Metropolis sampler
+run_metropolis <- function(inits, steps, away = 0.2, seed = 1234) {
+  set.seed(seed)
+  theta.post    <- rep(NA, steps)
+  theta.post[1] <- inits
+
+  for (t in 2:steps) {
+    theta_star <- move(theta.post[t - 1], away = away)
+
+    pstar  <- posterior(survived, p = theta_star)
+    pprev  <- posterior(survived, p = theta.post[t - 1])
+    logR   <- pstar - pprev
+    R      <- exp(logR)
+
+    accept        <- rbinom(1, 1, prob = min(R, 1))
+    theta.post[t] <- ifelse(accept == 1, theta_star, theta.post[t - 1])
+  }
+  return(theta.post)
+}
+```
+
+------------------------------------------------------------------------
+
+## Exercise 1 — Run the Chain and Inspect the Output {#ex1}
+
+Run the Metropolis algorithm for **100 steps** starting at $\theta_0 = 0.5$.
+
+```{r ex1-run}
+theta.post <- run_metropolis(inits = 0.5, steps = 100)
+
+head(theta.post)
+tail(theta.post)
+```
+
+**Questions:**
+
+a.  What do you notice about consecutive values (e.g., the first six)? What does this tell you about the nature of MCMC samples?
+b.  Plot the trace (iteration vs. $\theta$). Does the chain appear to be exploring the posterior, or is it stuck?
+c.  Now increase `steps` to **5 000**. Add horizontal lines for the posterior mean and the MLE ($19/57 \approx 0.333$). What do you observe?
+
+::: {.callout-tip collapse="true"}
+## Hint 1a
+
+Repeated values are not a bug — they occur when a proposed candidate is **rejected** and the chain stays put. This is expected behaviour; the chain still converges.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 1b — Trace plot code
+
+``` r
+plot(theta.post, type = "l",
+     xlab = "Iteration", ylab = expression(theta),
+     main = "Metropolis trace plot")
+```
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 1c — Long run with reference lines
+
+``` r
+theta.long <- run_metropolis(inits = 0.5, steps = 5000)
+
+plot(theta.long, type = "l",
+     xlab = "Iteration", ylab = expression(theta))
+abline(h = mean(theta.long), col = "darkgreen", lwd = 2, lty = 2)  # posterior mean
+abline(h = 19/57,            col = "red",       lwd = 2, lty = 2)  # MLE
+legend("topright",
+       legend = c("Posterior mean", "MLE"),
+       col    = c("darkgreen", "red"), lty = 2, lwd = 2)
+```
+
+For a model with a flat prior, the posterior mean and MLE should be nearly identical. Why?
+:::
+
+------------------------------------------------------------------------
+
+## Exercise 2 — Burn-in {#ex2}
+
+The chain requires some iterations to reach its **stationary distribution**, regardless of where it started. This initial wandering phase is called **burn-in**, and those samples are discarded before analysis.
+
+Run the chain for **1 000 steps** starting at $\theta_0 = 0.99$ — far from the true posterior mass.
+
+```{r ex2-burnin}
+theta.far <- run_metropolis(inits = 0.99, steps = 1000)
+
+plot(theta.far, type = "l",
+     xlab = "Iteration", ylab = expression(theta),
+     main = "Chain starting far from posterior (theta_0 = 0.99)")
+abline(h = 19/57, col = "red", lwd = 2, lty = 2)
+```
+
+**Questions:**
+
+a.  Approximately how many iterations does the chain take to "find" the posterior? This is your estimated burn-in.
+b.  What would happen to your posterior summaries (mean, credible interval) if you *forgot* to discard the burn-in?
+c.  Now run **two chains** from overdispersed starting values (e.g., 0.05 and 0.95) for 2 000 steps. Plot them together. Do they converge to the same region?
+
+::: {.callout-tip collapse="true"}
+## Hint 2a
+
+Look at the trace plot: identify the iteration where the chain stops trending and starts fluctuating around a stable level. Everything before that point is burn-in.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 2b
+
+The burn-in samples are not from the posterior — they reflect where the chain *started*, not where it *belongs*. Including them biases all posterior summaries upward (toward the starting value of 0.99).
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 2c — Plotting two chains
+
+``` r
+theta.chain1 <- run_metropolis(inits = 0.05, steps = 2000, seed = 1)
+theta.chain2 <- run_metropolis(inits = 0.95, steps = 2000, seed = 2)
+
+plot(theta.chain1, type = "l", col = "steelblue",
+     ylim = c(0, 1), xlab = "Iteration", ylab = expression(theta),
+     main = "Two chains from overdispersed starts")
+lines(theta.chain2, col = "coral")
+abline(h = 19/57, col = "black", lwd = 2, lty = 2)
+legend("topright", legend = c("Chain 1 (start = 0.05)", "Chain 2 (start = 0.95)"),
+       col = c("steelblue", "coral"), lty = 1)
+```
+
+Both chains should converge to the same region — this visual check is the intuition behind the Gelman–Rubin diagnostic.
+:::
+
+------------------------------------------------------------------------
+
+## Exercise 3 — The Role of the Proposal Variance {#ex3}
+
+The proposal standard deviation `away` controls how far the algorithm tries to jump at each step. It has no effect on *where* the chain converges, but a large effect on *how efficiently* it gets there.
+
+Run three chains of 5 000 steps with `away` set to **0.01**, **0.2**, and **2.0**.
+
+```{r ex3-mixing}
+theta.small  <- run_metropolis(inits = 0.5, steps = 5000, away = 0.01,  seed = 10)
+theta.medium <- run_metropolis(inits = 0.5, steps = 5000, away = 1.5,   seed = 10)
+theta.large  <- run_metropolis(inits = 0.5, steps = 5000, away = 7.0,   seed = 10)
+
+par(mfrow = c(1, 3))
+plot(theta.small,  type = "l", main = "SD = 0.01",  ylab = expression(theta), xlab = "Iteration")
+plot(theta.medium, type = "l", main = "SD = 1.5",   ylab = "", xlab = "Iteration")
+plot(theta.large,  type = "l", main = "SD = 7.0",   ylab = "", xlab = "Iteration")
+par(mfrow = c(1, 1))
+```
+
+**Questions:**
+
+a.  Describe the behaviour of each chain. What goes wrong at the extremes?
+b.  Compute the **acceptance rate** for each chain. A rule of thumb for single-parameter models is 23–50%. Which chain comes closest?
+c.  Compute the **autocorrelation function (ACF)** for each chain. Which proposal variance produces the least autocorrelated (most "independent-looking") samples?
+
+::: {.callout-tip collapse="true"}
+## Hint 3a
+
+-   **Too small:** the chain takes tiny steps and barely moves — it mixes slowly and gets stuck for long stretches.
+-   **Too large:** most proposals overshoot the posterior mass and get rejected — the chain also gets stuck, but by refusing to move rather than by moving too little.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 3b — Acceptance rate
+
+The acceptance rate is the proportion of steps where the chain *moved* (i.e., consecutive values differ):
+
+``` r
+acceptance_rate <- function(chain) mean(diff(chain) != 0)
+
+acceptance_rate(theta.small)
+acceptance_rate(theta.medium)
+acceptance_rate(theta.large)
+```
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 3c — ACF plots
+
+``` r
+par(mfrow = c(1, 3))
+acf(theta.small,  main = "ACF: SD = 0.01")
+acf(theta.medium, main = "ACF: SD = 1.5")
+acf(theta.large,  main = "ACF: SD = 7.0")
+par(mfrow = c(1, 1))
+```
+
+High autocorrelation (ACF stays near 1 for many lags) means consecutive samples are nearly identical — you need far more of them to get reliable posterior estimates.
+:::
+
+------------------------------------------------------------------------
+
+## Exercise 4 — Effective Sample Size {#ex4}
+
+Because MCMC samples are **serially correlated**, 5 000 raw draws do not carry the same information as 5 000 independent draws. The **effective sample size** ($n_\text{eff}$) adjusts for this autocorrelation:
+
+$$n_\text{eff} = \frac{n}{1 + 2\sum_{k=1}^{\infty} \hat{\rho}_k}$$
+
+where $\hat{\rho}_k$ is the estimated autocorrelation at lag $k$. The `coda` package computes this directly.
+
+```{r ex4-neff}
+library(coda)
+
+neff_small  <- effectiveSize(theta.small)
+neff_medium <- effectiveSize(theta.medium)
+neff_large  <- effectiveSize(theta.large)
+
+data.frame(
+  proposal_sd  = c(0.01, 1.5, 7.0),
+  raw_samples  = 5000,
+  n_eff        = round(c(neff_small, neff_medium, neff_large))
+)
+```
+
+**Questions:**
+
+a.  Which proposal variance yields the highest $n_\text{eff}$? Does this match your expectations from Exercise 3?
+b.  For the poorly-mixing chains, how many *raw* samples would you need to collect to achieve the same $n_\text{eff}$ as the best chain?
+c.  As a general guideline, $n_\text{eff} \geq 100$ is considered the minimum for reliable posterior summaries. Which chains meet this threshold with 5 000 raw samples?
+
+::: {.callout-tip collapse="true"}
+## Hint 4a
+
+The chain with intermediate proposal SD should have the highest $n_\text{eff}$ — it balances exploration and acceptance, producing samples that are as close to independent as possible given the algorithm.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 4b
+
+If the best chain has $n_\text{eff} = 2000$ from 5 000 samples, and a poor chain has $n_\text{eff} = 50$ from 5 000 samples, you would need approximately $5000 \times (2000 / 50) = 200\,000$ raw samples from the poor chain to match.
+:::
+
+------------------------------------------------------------------------
+
+## Exercise 5 — The Gelman–Rubin Diagnostic ($\hat{R}$) {#ex5}
+
+The **Gelman–Rubin statistic** $\hat{R}$ formalises the visual check from Exercise 2. It compares **between-chain variance** to **within-chain variance** across multiple chains run from overdispersed starting points:
+
+$$\hat{R} = \sqrt{\frac{\text{Var}_\text{between} + \text{Var}_\text{within}}{\text{Var}_\text{within}}}$$
+
+Intuitively: if all chains have converged to the *same* distribution, between-chain variance should be negligible relative to within-chain variance, and $\hat{R} \approx 1$. The conventional threshold is $\hat{R} < 1.1$.
+
+```{r ex5-rhat}
+library(coda)
+
+# Run 4 chains from overdispersed starting values
+starts <- c(0.05, 0.3, 0.7, 0.95)
+chains <- lapply(seq_along(starts), function(i) {
+  mcmc(run_metropolis(inits = starts[i], steps = 2000, seed = i))
+})
+chain_list <- mcmc.list(chains)
+
+# Gelman-Rubin diagnostic
+gelman.diag(chain_list)
+gelman.plot(chain_list)
+```
+
+**Questions:**
+
+a.  At what number of iterations does $\hat{R}$ drop below 1.1? Does this match your visual estimate of burn-in from Exercise 2?
+b.  Re-run with only **50 steps** per chain. What happens to $\hat{R}$? What does this tell you about minimum chain length?
+c.  What is the conceptual difference between $\hat{R}$ and $n_\text{eff}$? What does each diagnose?
+
+::: {.callout-tip collapse="true"}
+## Hint 5a
+
+The `gelman.plot()` function shows $\hat{R}$ as a function of iteration. Find the first point where the line crosses 1.1 from above and stays below it.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 5b
+
+With very short chains, the between-chain variance will dominate because different chains haven't had time to explore the same region. $\hat{R}$ will be large (potentially much greater than 1.1), signalling non-convergence even if the model is correctly specified.
+:::
+
+::: {.callout-tip collapse="true"}
+## Hint 5c
+
+-   $\hat{R}$ answers: **"Have all chains converged to the same distribution?"** — a question about *where* the chain is.
+-   $n_\text{eff}$ answers: **"How many independent samples do I effectively have?"** — a question about the *quality* of information in the chain.
+
+You need both: $\hat{R}$ checks convergence, $n_\text{eff}$ checks whether you have enough post-convergence samples.
+:::
+
+------------------------------------------------------------------------
+
+## Summary
+
+| Concept | What it measures | Target |
+|----|----|----|
+| **Trace plot** | Visual chain behaviour | Hairy caterpillar, no trends |
+| **Acceptance rate** | Fraction of proposals accepted | \~23–50% (univariate) |
+| **Burn-in** | Iterations before stationarity | Discard; inspect trace plot |
+| $\hat{R}$ | Cross-chain convergence | $< 1.1$ |
+| **ACF** | Serial correlation in chain | Rapid decay to zero |
+| $n_\text{eff}$ | Information-adjusted sample size | $\geq 100$ per parameter |
+
+The core message: MCMC turns posterior inference into a simulation problem. The algorithm never needs $P(\text{data})$ — the normalising constant cancels in the acceptance ratio. What it does need is careful **tuning** (proposal variance), sufficient **warm-up** (burn-in), and proper **diagnostics** ($\hat{R}$, $n_\text{eff}$) to confirm that the samples you collect are trustworthy representations of the posterior.
+
+------------------------------------------------------------------------
+
+## Now that you have played around check out these visualizations
+
+-   **Animating the Metropolis algorithm (1D):**\
+    <https://gist.github.com/oliviergimenez/5ee33af9c8d947b72a39ed1764040bf3>
+
+-   **Animating the Metropolis algorithm (2D):**\
+    <https://mbjoseph.github.io/posts/2018-12-25-animating-the-metropolis-algorithm/>
+
+-   **MCMC Interactive Gallery:**\
+    <https://chi-feng.github.io/mcmc-demo/>
+
+------------------------------------------------------------------------
+
+## References
+
+Gimenez, O. (2025). *Bayesian statistics with R: Markov Chain Monte Carlo*. Lecture slides, November–December 2025. <https://oliviergimenez.github.io/bayesian-stats-with-R/slides/mcmc.pdf>

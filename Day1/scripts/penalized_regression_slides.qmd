@@ -1,0 +1,281 @@
+---
+title: "Bayesian Connection To Penalized Regression"
+author: "Alexander Massey"
+date: today
+date-format: "MMMM D, YYYY"
+format:
+  revealjs:
+    embed-resources: true
+    theme: simple
+    slide-number: true
+    highlight-style: github
+    code-line-numbers: false
+    incremental: true
+    fontsize: 2em
+    fig-align: center
+    footer: "École doctorale SIReNA"
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+---
+
+## Classical Frequentist Case
+
+::: fragment
+**Classical Linear Regression Model:** $$
+y = X\beta + \epsilon
+$$
+
+$$
+y \sim N(X\beta, \sigma^2) \qquad \epsilon \sim N(0, \sigma^2)
+$$
+:::
+
+::: fragment
+**Minimize the sum of squared residuals:**
+
+$$
+\begin{align*}
+\widehat{\beta}_{OLS} &= \arg\min_{\beta} \sum_{i=1}^n (y_i - x_i^T \beta)^2 \\
+&= \arg\min_{\beta} \|  y - X\beta\|_2^2
+\end{align*}
+$$
+:::
+
+::: fragment
+[**High variance!**]{style="color:red"} Small changes in data can lead to large changes in $\hat{\beta}_{OLS}$.
+:::
+
+------------------------------------------------------------------------
+
+### Regularization
+
+::: fragment
+***Ridge Regression:*** $$
+\widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\| y - X\beta\|_2^2} + \lambda \color{blue}{\|\beta\|_2^2}
+$$
+:::
+
+::: fragment
+***Lasso:*** $$
+\widehat{\beta}_{Lasso} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \lambda \color{blue}{\|\beta\|_1}
+$$
+:::
+
+-   [**Error**]{style="color:red"} $+ \lambda$ [**Constraint**]{style="color:blue"}
+-   $\lambda$ is a **tuning parameter** that controls the strength of regularization.
+-   *glmnet* estimates $\lambda$ using **cross-validation**.
+
+------------------------------------------------------------------------
+
+## Geometric intuition
+
+![](images/ridge_lasso_esl.png){fig-align="center" width="80%"}
+
+::: {style="position:absolute; bottom:-30px; left:0px; font-size:0.6em; color:gray;"}
+Adapted from Hastie, Tibshirani, and Friedman (2009), <i>The Elements of Statistical Learning</i>.
+:::
+
+------------------------------------------------------------------------
+
+### Bayesian Linear Regression...
+
+::: {style="margin-bottom: 50px;"}
+:::
+
+::: fragment
+**Maximum A Posteriori (MAP)** estimator maximizes the posterior $P(\beta|y)$ : $$ \begin{align*}
+\widehat{\beta}_{MAP} &= \arg\max_{\beta} P(\beta|y) \\
+&=\arg\max_{\beta} \frac{P(y|\beta)P(\beta)}{P(y)} \\
+&=\arg\max_{\beta} P(y|\beta)P(\beta) \\
+&=\arg\max_{\beta} \big[ \log P(y|\beta)+\log P(\beta)]\big]
+\end{align*}$$
+:::
+
+::: {style="margin-bottom: 50px;"}
+:::
+
+::: fragment
+Now to specify a **likelihood**, i.e. $P(y|\beta)$, and **prior**, i.e. $P(\beta)$.
+:::
+
+------------------------------------------------------------------------
+
+### Bayesian ridge regression
+
+::: {style="margin-bottom: 50px;"}
+:::
+
+**Gaussian likelihood:** $\quad y \sim N(X\beta, \sigma^2)$ $$ \begin{align*}
+P(y|\beta) &= \frac{1}{(2\pi\sigma^2)^{n/2}} \exp\left(-\frac{1}{2\sigma^2} \|y - X\beta\|_2^2\right) \\
+\boldsymbol{\log P(y|\beta)}&=-\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2} \|y - X\beta\|_2^2 \\
+&\propto -\frac{1}{2\sigma^2} \color{red}{\|y - X\beta\|_2^2}\\
+\end{align*}$$
+
+::: {style="margin-bottom: 50px;"}
+:::
+
+**Gaussian prior:** $\quad \beta_j \sim N(0, \tau^2)\quad j=1,...,p\quad$ *(same for all!)*
+
+$$\begin{align*}
+\boldsymbol{\log P(\beta)} \propto -\frac{1}{2\tau^2} \color{blue}{\|\beta\|_2^2}
+\end{align*}$$
+
+------------------------------------------------------------------------
+
+::: {style="margin-bottom: 50px;"}
+:::
+
+**MAP for Ridge:** $$ \widehat{\beta}_{MAP} = \arg\max_{\beta} -\frac{1}{2\sigma^2} \|y - X\beta\|_2^2 - \frac{1}{2\tau^2} \|\beta\|_2^2 $$
+
+::: {style="margin-bottom: 50px;"}
+:::
+
+**Equivalence to Ridge:** $$ \widehat{\beta}_{Ridge} = \arg\min_{\beta} \color{red}{\|y - X\beta\|_2^2} + \frac{\sigma^2}{\tau^2} \color{blue}{\|\beta\|_2^2} $$ where $\lambda = \frac{\sigma^2}{\tau^2}$.
+
+------------------------------------------------------------------------
+
+### Sparse Bayesian Priors
+
+Use priors with very stronger shrinkage near zero for variable selection.
+
+::: fragment
+**Bayesian Lasso**
+
+Equivalence when using the Laplace prior:
+
+$$
+\beta_j \sim \frac{1}{2b}\exp\left(-\frac{|\beta_j|}{b}\right)
+$$
+:::
+
+::: fragment
+**Horseshoe Prior**
+
+$$
+\beta_i \mid \tau,\lambda_i \sim N(0,\tau^2\lambda_i^2),
+\qquad
+\lambda_i \sim \text{Half-Cauchy}(0,1)
+$$
+
+-   **Global shrinkage:** $\tau$\
+-   **Local shrinkage:** $\lambda_i$
+:::
+
+::: fragment
+Large coefficients can **escape shrinkage** to zero AND shrink less than Lasso.
+:::
+
+------------------------------------------------------------------------
+
+### Shape of the regularization priors
+
+```{r}
+#| fig.width: 15
+#| fig.height: 10
+#| fig.align: center
+#| echo: false
+#| warning: false
+#| message: false
+
+library(ggplot2)
+
+set.seed(123)
+
+# Grid
+beta_j <- seq(-4, 4, length.out = 1000)
+
+# Parameters
+b <- 1
+sigma <- 1
+
+# Gaussian prior
+gaussian_prior <- dnorm(beta_j, 0, sigma)
+
+# Laplace prior
+laplace_prior <- (1/(2*b))*exp(-abs(beta_j)/b)
+
+# Horseshoe prior (Monte Carlo approximation)
+n <- 200000
+lambda <- abs(rcauchy(n))
+beta_hs <- rnorm(n,0,lambda)
+
+hs_density <- density(beta_hs, from=-4, to=4, n=1000)
+
+priors_df <- data.frame(
+  beta_j = beta_j,
+  Gaussian = gaussian_prior,
+  Laplace = laplace_prior,
+  Horseshoe = hs_density$y
+)
+
+ggplot(priors_df, aes(x=beta_j)) +
+  geom_line(aes(y=Gaussian, color="Gaussian"), linewidth=2) +
+  geom_line(aes(y=Laplace, color="Laplace"), linewidth=2) +
+  geom_line(aes(y=Horseshoe, color="Horseshoe"), linewidth=2) +
+  geom_vline(xintercept=0, linetype="dashed") +
+  labs(x=expression(beta[j]), y="Density", color="Prior") +
+  coord_cartesian(ylim=c(0,1)) +
+  scale_color_manual(values=c(
+    "Gaussian"="red",
+    "Laplace"="blue",
+    "Horseshoe"="darkgreen"
+  )) +
+  theme_minimal() +
+  theme(
+    legend.position="bottom",
+    legend.text=element_text(size=28),
+    legend.title=element_text(size=28),
+    axis.title=element_text(size=28),
+    axis.text=element_text(size=28),
+    axis.line=element_line(color="black"),
+    panel.grid=element_blank()
+  )
+```
+
+------------------------------------------------------------------------
+
+### Horseshoe Shrinkage Factor
+
+Reparameterize the horseshoe prior using the **shrinkage factor** $\kappa_i = \frac{1}{1+\tau^2\lambda_i^2}$. $$
+\kappa_i \sim \text{Beta}(1/2,1/2)
+$$ - $\kappa_i \approx 1$ → strong shrinkage ($\beta_i \approx 0$)\
+- $\kappa_i \approx 0$ → little shrinkage (signal preserved)
+
+```{r}
+#| fig.width: 12
+#| fig.height: 8
+#| fig.align: center
+#| echo: false
+#| warning: false
+#| message: false
+
+library(ggplot2)
+
+kappa <- seq(0.0001,0.9999,length.out=1000)
+
+beta_density <- dbeta(kappa,0.5,0.5)
+
+df <- data.frame(
+  kappa = kappa,
+  density = beta_density
+)
+
+ggplot(df,aes(kappa,density)) +
+  geom_line(linewidth=3, color="darkgreen") +
+  labs(
+    x=expression(kappa[i]),
+    y="Density"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.title = element_text(size=36),
+    axis.text = element_text(size=30),
+    axis.line = element_line(color="black", linewidth=1.5),
+    axis.ticks = element_line(linewidth=1.5),
+    axis.ticks.length = unit(0.25,"cm"),
+    panel.grid = element_blank()
+  )
+```

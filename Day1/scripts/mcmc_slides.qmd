@@ -1,0 +1,243 @@
+---
+title: "Markov Chain Monte Carlo"
+subtitle: "The Intuition"
+author: "Alexander Massey"
+date: today
+date-format: "MMMM D, YYYY"
+format:
+  revealjs:
+    embed-resources: true
+    theme: simple
+    slide-number: true
+    highlight-style: github
+    code-line-numbers: false
+    incremental: true
+    fontsize: 2em
+    fig-align: center
+    footer: "École doctorale SIReNA"
+execute:
+  echo: false
+  eval: false
+---
+
+## Why MCMC? {.center}
+
+Bayes' theorem gives us the posterior:
+
+$$P(\theta \mid \text{data}) = \frac{P(\text{data} \mid \theta)\, P(\theta)}{P(\text{data})}$$
+
+The problem: the denominator
+
+$$P(\text{data}) = \int P(\text{data} \mid \theta)\, P(\theta)\, d\theta$$
+
+is a **high-dimensional integral** — analytically intractable in most real models.
+
+::: {.callout-note}
+## Key insight
+We don't need $P(\text{data})$ if we can **sample** from the posterior.
+:::
+
+---
+
+## The integral problem: a concrete example
+
+For a simple linear regression $y_i = \alpha + \beta x_i + \varepsilon_i$, $\varepsilon_i \sim \mathscr{N}(0, \sigma^2)$, the posterior requires:
+
+$$P(\text{data}) = \iiint P(\text{data} \mid \alpha, \beta, \sigma)\, P(\alpha)\, P(\beta)\, P(\sigma)\; d\alpha\; d\beta\; d\sigma$$
+
+This is a **3-dimensional integral** — already unpleasant. A hierarchical model with $N$ random effects requires an $(N+k)$-dimensional integral.
+
+::: {.fragment}
+::: {.callout-warning}
+## The curse of dimensionality
+Numerical grid methods scale as $G^N$ for $G$ grid points and $N$ parameters.  
+With $G = 100$ and $N = 10$: $10^{20}$ evaluations. Infeasible.
+:::
+:::
+
+---
+
+## Two alternatives to MCMC
+
+Before MCMC became dominant, two approximations were common:
+
+**1. Laplace approximation** — approximate the posterior with a Gaussian by matching its mode and curvature. Fast, but fails for skewed or multimodal posteriors.
+
+**2. Variational inference** — find the closest member of a tractable family of distributions. Scalable, but introduces bias.
+
+::: {.fragment}
+**MCMC** makes no distributional assumption. It produces *exact* samples from the posterior (asymptotically) at the cost of computation time.
+:::
+
+---
+
+## The Laplace Approximation
+
+Approximate $\log P(\theta \mid \text{data})$ with a second-order Taylor expansion around the posterior mode $\hat{\theta}$:
+
+$$
+\log P(\theta \mid \text{data})
+\approx
+\log P(\hat{\theta} \mid \text{data})
+- \frac{1}{2}(\theta - \hat{\theta})^\top
+\underbrace{\left[-\frac{\partial^2 \log P}{\partial \theta \partial \theta^\top}\bigg|_{\hat{\theta}}\right]}_{\text{negative Hessian}}
+(\theta - \hat{\theta})
+$$
+
+Exponentiating gives a **Gaussian approximation**:
+
+$$
+P(\theta \mid \text{data})
+\approx
+\mathscr{N}\!\left(\hat{\theta},\;
+\left[-\nabla^2 \log P(\hat{\theta})\right]^{-1}
+\right)
+$$
+
+::: {.callout-tip}
+## When does it work?
+Works well when the posterior is unimodal and roughly symmetric  
+(e.g., large samples, well-identified models)
+
+Breaks down with multimodality, strong skewness, or boundary constraints
+:::
+
+---
+
+## The MCMC idea
+
+> **Simulate a random walk** that — in the long run — visits each point $\theta$ in proportion to $P(\theta \mid \text{data})$.
+
+The collection of visited points **is** your posterior sample.
+
+- Avoids computing the normalising constant $P(\text{data})$ entirely
+- Works in any dimension
+- Invented in physics (1950s), rediscovered by statisticians in the early 1990s
+
+---
+
+## The Metropolis Algorithm
+
+**At each step $t$:**
+
+1. Propose $\theta^* \sim q(\cdot \mid \theta_{t-1})$
+
+2. Assume **symmetric proposal**  
+   $q(\theta^* \mid \theta) = q(\theta \mid \theta^*)$
+
+3. Compute
+$$
+R = \frac{P(\theta^* \mid \text{data})}{P(\theta_{t-1} \mid \text{data})}
+= \frac{P(\text{data} \mid \theta^*)\,P(\theta^*)}{P(\text{data} \mid \theta_{t-1})\,P(\theta_{t-1})}
+$$
+
+4. Accept with probability $\min(1, R)$; otherwise stay
+
+## Why Metropolis works
+
+**Stationarity (detailed balance):**
+$$
+P(\theta_a)\,T(\theta_b \mid \theta_a)
+=
+P(\theta_b)\,T(\theta_a \mid \theta_b)
+$$
+
+**Accept/reject ensures detailed balance**  
+→ Posterior is stationary, with convergence under mild conditions
+
+### Key insight
+
+> Always accept moves to higher density;  
+> downweight moves to lower density  
+
+$$
+\text{Time spent at } \theta \propto P(\theta)
+$$
+
+## Convergence diagnostics
+
+**Burn-in:** The chain takes time to reach stationarity regardless of starting point. Discard these early iterations.
+
+A healthy chain (*"hairy caterpillar"*) — no trends, no long flat stretches — signals stationarity has been reached.
+
+**Gelman–Rubin statistic $\hat{R}$:** Run multiple chains from overdispersed starting points. Compare between-chain to within-chain variance:
+
+$$\hat{R} = \sqrt{\frac{\text{Var}_\text{between} + \text{Var}_\text{within}}{\text{Var}_\text{within}}}$$
+
+If all chains have converged to the same distribution, $\hat{R} \approx 1$.  
+**Rule of thumb:** $\hat{R} < 1.1$.
+
+---
+
+## Mixing and the proposal variance
+
+How far the algorithm proposes to jump at each step determines **mixing quality**:
+
+| Proposal SD | Behaviour | Problem |
+|-------------|-----------|---------|
+| Too small   | Tiny steps, high acceptance rate | Slow exploration |
+| Too large   | Big jumps, low acceptance rate | Stuck by rejection |
+| **Just right** | **Balanced acceptance (~23–50%)** | **Good mixing** |
+
+Poor mixing shows up as **high autocorrelation** — consecutive draws are nearly identical, carrying little new information about the posterior.
+
+---
+
+## Effective sample size
+
+Because successive MCMC draws are **correlated**, $n$ raw iterations $\neq$ $n$ independent draws.
+
+$$n_\text{eff} = \frac{n}{1 + 2\displaystyle\sum_{k=1}^{\infty} \rho_k}$$
+
+where $\rho_k$ is the autocorrelation at lag $k$.
+
+::: {.callout-important}
+- $n_\text{eff} \geq 100$ bare minimum per parameter.
+- $n_\text{eff} \geq 400$ for robust posterior summaries ([Gelman et al.](https://doi.org/10.1201/b16018)).
+- $n_\text{eff} \geq 1000$ for high-quality publication.
+:::
+
+A well-tuned proposal variance maximises $n_\text{eff}$ per unit of computation.
+
+---
+
+## What if chains don't converge?
+
+1. **More iterations** / longer burn-in
+2. **Better starting values** — use estimates from a simpler model
+3. **More informative priors** — help the sampler navigate the space
+4. **Reparameterise** — centre predictors, use non-centred parameterisations for hierarchical models
+
+::: {.callout-warning}
+Persistent non-convergence usually signals a **model problem**, not just a computational one. Simplify, simulate from known parameters, check recovery.
+:::
+
+---
+
+## Summary
+
+| Concept | One-liner |
+|---------|-----------|
+| **MCMC** | Random walk whose stationary distribution = posterior |
+| **Metropolis** | Accept/reject via posterior ratio; $P(\text{data})$ cancels |
+| **Burn-in** | Discard pre-convergence iterations |
+| **$\hat{R}$** | Between/within chain variance ratio; target $< 1.1$ |
+| **Mixing** | Chain's ability to explore; tuned via proposal SD |
+| **$n_\text{eff}$** | Autocorrelation-adjusted sample size; target $\geq 100$ |
+
+::: {.fragment}
+**The big picture:** MCMC bypasses intractable integrals by turning posterior inference into a *simulation* problem. The normalising constant never needs to be computed.
+:::
+
+---
+
+## Interactive resources
+
+- **Animating the Metropolis algorithm (1D):**  
+  <https://gist.github.com/oliviergimenez/5ee33af9c8d947b72a39ed1764040bf3>
+
+- **Animating the Metropolis algorithm (2D):**  
+  <https://mbjoseph.github.io/posts/2018-12-25-animating-the-metropolis-algorithm/>
+
+- **MCMC Interactive Gallery:**  
+  <https://chi-feng.github.io/mcmc-demo/>

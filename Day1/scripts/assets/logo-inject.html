@@ -1,0 +1,63 @@
+<script>
+  window.addEventListener('load', function () {
+
+    /* ── 1. Title-slide logos (centered, below author) ── */
+    setTimeout(function () {
+      var titleSlide = document.querySelector('#title-slide');
+      if (!titleSlide) return;
+
+      var authorEl = titleSlide.querySelector('.author')
+                  || titleSlide.querySelector('[class*="author"]')
+                  || titleSlide.querySelector('p:nth-child(2)');
+
+      /* Create a flex wrapper to hold both logos side by side */
+      var logoWrapper = document.createElement('div');
+      logoWrapper.className = 'title-logo-wrapper';
+
+      var logo1 = document.createElement('img');
+      logo1.src       = 'images/Logo_GeoData_Paris.png';
+      logo1.className = 'title-logo';
+      logo1.alt       = 'Géodata Paris';
+
+      var logo2 = document.createElement('img');
+      logo2.src       = 'images/Logo-SIReNa.png';
+      logo2.className = 'title-logo';
+      logo2.alt       = 'SIReNa';
+
+      logoWrapper.appendChild(logo1);
+      logoWrapper.appendChild(logo2);
+
+      if (authorEl && authorEl.parentNode === titleSlide) {
+        authorEl.insertAdjacentElement('afterend', logoWrapper);
+      } else if (authorEl) {
+        var ancestor = authorEl;
+        while (ancestor.parentNode !== titleSlide) {
+          ancestor = ancestor.parentNode;
+        }
+        ancestor.insertAdjacentElement('afterend', logoWrapper);
+      } else {
+        titleSlide.appendChild(logoWrapper);
+      }
+
+    }, 500);
+
+    /* ── 2. Corner logo on every NON-title slide ── */
+    var cornerLogo = document.createElement('img');
+    cornerLogo.src       = 'images/Logo-SIReNa.png';
+    cornerLogo.className = 'corner-logo';
+    cornerLogo.alt       = 'Géodata Paris';
+    document.querySelector('.reveal').appendChild(cornerLogo);
+
+    function updateCornerLogo() {
+      var currentSlide = document.querySelector('.reveal .slides .present');
+      if (currentSlide && currentSlide.id === 'title-slide') {
+        cornerLogo.style.display = 'none';
+      } else {
+        cornerLogo.style.display = 'block';
+      }
+    }
+
+    setTimeout(updateCornerLogo, 550);
+    document.querySelector('.reveal').addEventListener('slidechanged', updateCornerLogo);
+  });
+</script>

@@ -1,0 +1,541 @@
+---
+title: "Multi-level models"
+subtitle: "tadpole example from Rethinking"
+author: "Alexander Massey"
+date: today
+date-format: "MMMM D, YYYY"
+format:
+  revealjs:
+    embed-resources: true
+    theme: white
+    slide-number: true
+    chalkboard: false
+    incremental: true
+    code-overflow: wrap
+    fontsize: 2em
+    title-slide-attributes:
+      data-background-image: ""
+    katex: TRUE
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+```
+
+## Outline {.unnumbered}
+
+::: {.nonincremental}
+1. The problem with independent group estimates
+2. What is a multilevel model?
+3. Mixed models: same idea, different language
+4. Three estimators: complete pooling, no pooling, partial pooling
+5. Bayesian hierarchical specification
+6. Shrinkage and why it works
+7. Today's exercise
+:::
+
+
+# Part 1 {.section-slide}
+
+## The Core Problem
+
+Suppose you observe survival rates across **48 tanks** of tadpoles.
+
+. . .
+
+Each tank has $n_i$ tadpoles and $s_i$ survivors.
+
+. . .
+
+**Two naive strategies:**
+
+- Estimate each tank independently → noisy, overfits small tanks
+- Pool all tanks together → ignores real variation between tanks
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+Neither extreme is satisfying. We need something in between.
+:::
+
+---
+
+## A Concrete Example
+
+::: {.columns}
+::: {.column width="50%"}
+**Tank A:** 5 tadpoles, 5 survive  
+$\hat{p} = 1.00$
+
+**Tank B:** 5 tadpoles, 0 survive  
+$\hat{p} = 0.00$
+:::
+::: {.column width="50%"}
+Should we really believe survival is **100%** or **0%** in these tanks?
+
+. . .
+
+Or is there **sampling noise** on top of a shared population process?
+:::
+:::
+
+. . .
+
+The key insight: tanks are not isolated experiments — they share a common biology.
+
+
+# Part 2 {.section-slide}
+
+## What Is a Multilevel Model?
+
+A multilevel (hierarchical) model adds a **population distribution** over group-level parameters.
+
+. . .
+
+Instead of:
+
+$$\alpha_{\text{tank}} \sim \text{Normal}(0,\ 5) \quad \text{(independent, fixed prior)}$$
+
+. . .
+
+We write:
+
+$$\alpha_{\text{tank}} \sim \text{Normal}(\mu_\alpha,\ \sigma_\alpha) \quad \text{(shared population)}$$
+
+$$\mu_\alpha \sim \text{Normal}(0, 1), \qquad \sigma_\alpha \sim \text{Half-Cauchy}(0, 1)$$
+
+. . .
+
+Now $\mu_\alpha$ and $\sigma_\alpha$ are **estimated from the data**.
+
+---
+
+## What This Buys Us
+
+- **Regularization**: small tanks are pulled toward the population mean
+- **Calibrated uncertainty**: wide $\sigma_\alpha$ → tanks really differ; small $\sigma_\alpha$ → pooling is justified
+- **Honest inference**: we acknowledge that groups come from a common population
+
+. . .
+
+This is not a trick — it is the **correct generative model** when groups share a common process.
+
+
+# Part 3 {.section-slide}
+
+## Mixed Models: Same Idea, Different Language
+
+Frequentist **linear mixed models** (LMMs) are hierarchical models in disguise.
+
+. . .
+
+In `lme4`:
+
+```r
+lmer(surv ~ 1 + (1 | tank), data = d)
+```
+
+This fits the same structure as our Bayesian model — a population-level intercept plus tank-level deviations.
+
+. . .
+
+So why the confusion?
+
+---
+
+## The Terminology Problem
+
+::: {style="font-size: 0.85em;"}
+
+| Frequentist LMM term | What it actually means |
+|---|---|
+| **Fixed effect** | Population-level parameter (estimated, interpreted directly) |
+| **Random effect** | Group-level deviation from the population mean |
+| **REML** | Restricted maximum likelihood — a bias correction for variance components; not a prior |
+| **BLUPs** | Best linear unbiased predictors — empirical Bayes estimates of group-level effects |
+
+:::
+
+. . .
+
+::: {.callout-warning appearance="minimal"}
+"Fixed" and "random" do not mean what they sound like. The terminology predates modern statistical thinking and causes genuine confusion even among practitioners.
+:::
+
+---
+
+## Bayesian vs. Frequentist Framing
+
+| | Bayesian (brms) | Frequentist (lme4) |
+|---|---|---|
+| Group intercepts | Parameters with a prior | "Random effects" — not full parameters |
+| Population $\sigma$ | Posterior distribution | Point estimate via REML |
+| Uncertainty | Full posterior | Confidence intervals (often approximate) |
+| Interpretation | Direct probability statements | Repeated-sampling guarantees |
+
+. . .
+
+The **models are nearly identical**. The Bayesian framing is more explicit about what is being assumed.  Also the prior helps with toxic cases like if all units in group are identical.
+
+
+# Part 4 {.section-slide}
+
+## Three strategies:
+
+**Complete pooling** — All tanks share a single intercept
+$$\text{logit}(p_i) = \alpha$$
+
+**No pooling** — estimate each group independently
+$$\text{logit}(p_i) = \alpha_{\text{tank}[i]}$$
+
+**Partial Pooling** — share population distribution so information is "borrowed" across groups (shrinkage).
+
+$$\begin{aligned} \text{logit}(p_i) &= \alpha_{\text{tank}[i]} \\ \alpha_{\text{tank}} &\sim \text{Normal}(\mu_{\alpha}, \sigma_{\alpha}) \\ \mu_{\alpha} &\sim \text{Normal}(0, 1.5) \\ \sigma_{\alpha} &\sim \text{Exponential}(1) \end{aligned}$$
+
+---
+
+## Three strategies:
+
+**Complete pooling** 
+
+```r
+# All tanks share a single intercept
+brm(surv | trials(density) ~ 1, 
+    family = binomial, data = d)
+```
+
+**No pooling** 
+```r
+brm(surv | trials(density) ~ 0 + tank, 
+    family = binomial, data = d)
+```
+
+**Partial Pooling** 
+
+```r
+# Adaptive/Varying intercepts for tank
+brm(surv | trials(density) ~ 1 + (1 | tank),
+    data = d, family = binomial,
+    prior = c(
+      set_prior("normal(0, 1.5)", class = "Intercept"), # the default
+      set_prior("exponential(1)", class = "sd")         # the default
+    ))
+```
+
+---
+
+## The Trade-off
+
+```{r}
+#| label: pooling-diagram
+#| fig-height: 3.5
+#| fig-width: 9
+
+set.seed(42)
+n <- 20
+true_mu <- 0.6
+true_sd <- 0.25
+true_p  <- plogis(rnorm(n, qlogis(true_mu), true_sd))
+ni      <- sample(c(3, 5, 8, 20, 30), n, replace = TRUE)
+si      <- rbinom(n, ni, true_p)
+p_obs   <- si / ni
+
+# Partial pool: shrink toward grand mean, weighted by ni
+grand   <- weighted.mean(p_obs, ni)
+lambda  <- ni / (ni + 5)
+p_part  <- lambda * p_obs + (1 - lambda) * grand
+
+df <- tibble(
+  tank   = 1:n,
+  nopool = p_obs,
+  partial= p_part,
+  complete = grand
+)
+
+df %>%
+  pivot_longer(-tank, names_to = "estimator", values_to = "p") %>%
+  mutate(estimator = factor(estimator,
+    levels = c("nopool", "partial", "complete"),
+    labels = c("No pooling", "Partial pooling", "Complete pooling"))) %>%
+  ggplot(aes(x = tank, y = p, color = estimator, shape = estimator)) +
+  geom_hline(yintercept = true_mu, linetype = "dashed", color = "grey60", linewidth = 0.5) +
+  geom_point(size = 2.5, alpha = 0.9) +
+  scale_color_manual(values = c("No pooling" = "#E07B39",
+                                "Partial pooling" = "#2C6E8A",
+                                "Complete pooling" = "#555555")) +
+  scale_shape_manual(values = c("No pooling" = 16, "Partial pooling" = 1, "Complete pooling" = 3)) +
+  scale_y_continuous(limits = c(0, 1), name = "Estimated survival probability") +
+  scale_x_continuous(name = "Tank") +
+  annotate("text", x = n + 0.5, y = true_mu + 0.03, label = "true μ",
+           size = 3, color = "grey50", hjust = 0) +
+  labs(color = NULL, shape = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank())
+```
+
+. . .
+
+Partial pooling is **adaptive**: small tanks shrink more, large tanks shrink less.
+
+# Part 5 {.section-slide}
+
+## Specify full hierarchical Bayesian model:
+
+**Level 1** — observation model (likelihood):
+
+$$s_i \sim \text{Binomial}(n_i,\ p_i)$$
+
+
+**Level 2** — group-level model:
+
+$$\text{logit}(p_i) = \alpha_{\text{tank}_i}$$
+$$\alpha_{\text{tank}} \sim \text{Normal}(\mu_\alpha,\ \sigma_\alpha)$$
+
+**Level 3** — hyperpriors:
+
+$$\mu_\alpha \sim \text{Normal}(0,\ 1)$$
+$$\sigma_\alpha \sim \text{Half-Cauchy}(0,\ 1)$$
+
+---
+
+## In brms
+
+**No-pooling model** — each tank gets an independent intercept:
+
+```r
+brm(surv | trials(density) ~ 0 + factor(tank),
+    prior = prior(normal(0, 5), class = b),
+    family = binomial, data = d)
+```
+
+. . .
+
+**Partial-pooling model** — intercepts drawn from a population:
+
+```r
+brm(surv | trials(density) ~ 1 + (1 | tank),
+    prior = c(prior(normal(0, 1), class = Intercept),
+              prior(cauchy(0, 1), class = sd)),
+    family = binomial, data = d)
+```
+
+. . .
+
+The syntax `(1 | tank)` is borrowed from `lme4`. The prior on `class = sd` controls $\sigma_\alpha$ — **in the standard deviation metric**.
+
+---
+
+## Priors on the Variance Component
+
+$\sigma_\alpha$ governs how much tanks vary. Two common choices:
+
+. . .
+
+**Half-Cauchy(0, 1)** — heavy tails, allows large between-group variation
+
+$$\sigma_\alpha \sim \text{Half-Cauchy}(0,\ 1)$$
+
+. . .
+
+**Exponential(1)** — lighter tails, more skeptical of extreme variation
+
+$$\sigma_\alpha \sim \text{Exponential}(1)$$
+
+. . .
+
+In practice, for well-identified problems with moderate group counts, the choice rarely matters much. **Check with a sensitivity analysis.**
+
+# Part 6 {.section-slide}
+
+## Shrinkage: Why It Works
+
+When a tank has **few observations**, the likelihood is weak.
+
+. . .
+
+The population prior $\text{Normal}(\mu_\alpha, \sigma_\alpha)$ dominates → estimate pulled toward $\mu_\alpha$.
+
+. . .
+
+When a tank has **many observations**, the likelihood is strong.
+
+. . .
+
+The data dominate → estimate close to the observed proportion.
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+This is **automatic regularization** — no tuning parameter required. The degree of shrinkage is determined by the data through the estimated $\sigma_\alpha$.
+:::
+
+---
+
+## Shrinkage Reduces Error
+
+```{r}
+#| label: error-comparison
+#| fig-height: 3.2
+#| fig-width: 9
+
+set.seed(7)
+ns    <- c(3, 5, 10, 25, 40)
+reps  <- 200
+true_mu_lo <- 0.6
+true_sd_lo <- 0.3
+
+results <- map_dfr(ns, function(n_i) {
+  map_dfr(1:reps, function(r) {
+    true_p  <- plogis(rnorm(1, qlogis(true_mu_lo), true_sd_lo))
+    s       <- rbinom(1, n_i, true_p)
+    p_nopool <- s / n_i
+    # simple shrinkage toward 0.6
+    lambda  <- n_i / (n_i + 8)
+    p_part  <- lambda * p_nopool + (1 - lambda) * true_mu_lo
+    tibble(n = n_i,
+           nopool_err  = abs(p_nopool - true_p),
+           partial_err = abs(p_part   - true_p))
+  })
+})
+
+results %>%
+  group_by(n) %>%
+  summarise(nopool  = mean(nopool_err),
+            partial = mean(partial_err)) %>%
+  pivot_longer(-n, names_to = "estimator", values_to = "mean_abs_error") %>%
+  mutate(estimator = if_else(estimator == "nopool", "No pooling", "Partial pooling")) %>%
+  ggplot(aes(x = n, y = mean_abs_error, color = estimator)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("No pooling" = "#E07B39", "Partial pooling" = "#2C6E8A")) +
+  scale_x_continuous(breaks = ns, name = "Tadpoles per tank") +
+  scale_y_continuous(name = "Mean absolute error") +
+  labs(color = NULL,
+       title = "Partial pooling beats no pooling most in small groups") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom",
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank())
+```
+
+. . .
+
+The advantage is largest for **small groups** and shrinks as within-group sample size grows.
+
+---
+
+## When Is Partial Pooling Worth It?
+
+Partial pooling is most valuable when:
+
+- Some groups have **few observations**
+- Groups plausibly share a **common population process**
+- You want to compensate for **compounding variables** implicitly
+- You plan to **predict for new groups** not seen in training
+
+. . .
+
+It converges to complete pooling when $\hat{\sigma}_\alpha \to 0$, and to no pooling when $\hat{\sigma}_\alpha \to \infty$.
+
+
+# Part 7 {.section-slide}
+
+## Today's Exercise
+
+**Dataset:** Reed frog tadpole survival (`reedfrogs`, 48 tanks)
+
+. . .
+
+**Part 1 — Real data**
+
+- Fit the no-pooling and partial-pooling binomial models
+- Compare predictive accuracy with `loo_compare()`
+- Visualize shrinkage of tank estimates
+
+. . .
+
+**Part 2 — Simulation study**
+
+- Simulate 60 ponds with known true survival probabilities
+- Compare all three estimators against ground truth
+- Confirm that partial pooling dominates in small ponds
+
+---
+
+## Workflow for Each Model
+
+For every model you fit today:
+
+::: {.nonincremental}
+1. **Prior predictive check** — do prior draws look plausible?
+2. **Fit the model** — `brm(...)`
+3. **Convergence** — inspect $\hat{R}$, $N_{eff}$, trace plots
+4. **Posterior predictive check** — does the model reproduce the data?
+5. **Inference** — interpret parameters, plot effects
+:::
+
+. . .
+
+This workflow applies to every Bayesian model, not just multilevel ones. Make it a habit.
+
+---
+
+## Key Parameters to Interpret
+
+From `print(model_brms)`:
+
+- `b_Intercept` → $\mu_\alpha$, population-average log-odds of survival
+  → back-transform: `plogis(b_Intercept)`
+
+- `sd_tank__Intercept` → $\sigma_\alpha$, between-tank standard deviation on log-odds scale
+
+. . .
+
+From `coef(model_brms)$tank`:
+
+- Tank-level posterior medians, partially pooled toward $\mu_\alpha$
+
+. . .
+
+From `loo_compare()`:
+
+- `elpd_diff` — difference in expected log predictive density
+- Rule of thumb: `|elpd_diff| > 2 × se_diff` → meaningful difference
+
+---
+
+## Summary
+
+::: {.nonincremental}
+- Multilevel models share information across groups via a **population distribution**
+- They are identical in structure to frequentist mixed models — the Bayesian framing is more explicit
+- Frequentist terminology (fixed/random effects, REML) is a historical artifact; the Bayesian terms are clearer
+- Partial pooling **adaptively regularizes**: more shrinkage for data-sparse groups
+- In `brms`: `(1 | group)` specifies varying intercepts; prior on `class = sd` controls $\sigma_\alpha$
+:::
+
+. . .
+
+::: {.callout-note appearance="minimal"}
+Open `multilevel_exercise.qmd`.
+:::
+
+---
+
+## References
+
+::: {.nonincremental style="font-size: 0.8em;"}
+- McElreath, R. (2020). *Statistical Rethinking*, 2nd ed. CRC Press. Chapter 13.
+- Kurz, A. S. (2023). *Statistical Rethinking with brms, ggplot2, and the tidyverse*. <https://bookdown.org/ajkurz/Statistical_Rethinking_recoded/>
+- Bürkner, P.-C. (2017). brms: An R package for Bayesian multilevel models using Stan. *Journal of Statistical Software*, 80(1), 1–28.
+- Gelman, A. & Hill, J. (2007). *Data Analysis Using Regression and Multilevel/Hierarchical Models*. Cambridge University Press.
+- Bates, D., Mächler, M., Bolker, B., & Walker, S. (2015). Fitting linear mixed-effects models using lme4. *Journal of Statistical Software*, 67(1), 1–48.
+:::
