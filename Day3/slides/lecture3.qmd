@@ -37,7 +37,6 @@ library(fmesher)
 -   Introduction to Latent Gaussian Models and inlabru (this morning)
 -   Adding temporal structure in models (this morning)
 -   Adding spatial structure in models (now)
--   Spatio-temporal structure (to end this day)
 :::
 
 ## What we saw: Latent Gaussian Models
@@ -505,10 +504,11 @@ m_d <- fm_mesh_2d_inla(loc = st_coordinates(fdat),
 spde_field <- inla.spde2.pcmatern(mesh = m_d, 
                                   prior.range = c(10000, 0.05),
                                   prior.sigma = c(0.6, 0.01))
+st_geometry(fdat) <- "geom"
 ```
 
 ```{r echo=TRUE}
-m_matern <- bru(n ~ Intercept(1) + matern_field(geometry, model = spde_field),
+m_matern <- bru(n ~ Intercept(1) + matern_field(geom, model = spde_field),
                 data = fdat,
                 family = "poisson")
 
@@ -526,7 +526,7 @@ grid_crop <- st_intersection(grid_full,
                              greco[greco$greco == "D",])
 grid_xy <- st_as_sf(st_centroid(grid_crop))
 grid_xy$ID <- 1:nrow(grid_xy)
-st_geometry(grid_xy) <- "geometry"
+st_geometry(grid_xy) <- "geom"
 
 ```
 

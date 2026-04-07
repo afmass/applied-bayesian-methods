@@ -21,7 +21,7 @@ library(tidyverse)
 ::: incremental
 -   Day 1: fundamentals of Bayesian Data Analysis
 -   Day 1: extension of regression models in BDA: mixed-effect models and regularization
--   Day 2: [...]
+-   Day 2: Bayesian Model Averaging
 :::
 
 
@@ -31,7 +31,6 @@ library(tidyverse)
 -   Introduction to Latent Gaussian Models and inlabru (now)
 -   Adding temporal structure in models (later this morning)
 -   Adding spatial structure in models (after lunch break)
--   Spatio-temporal structure and general discussion (to end this day)
 :::
 
 ## Latent Gaussian Models - what we already now

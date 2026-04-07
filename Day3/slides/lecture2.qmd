@@ -9,9 +9,15 @@ format:
       buttons: false
     preview-links: auto
     css: styles.css
+execute:
+  echo: false
+  warning: false
+  message: false
+  cache: false
+  eval: true
 ---
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+```{r}
 ## load libraries
 library(tidyverse)
 library(inlabru)
@@ -24,7 +30,6 @@ library(rstanarm)
 -   Introduction to Latent Gaussian Models and inlabru (earlier this morning)
 -   Adding temporal structure in models (now)
 -   Adding spatial structure in models (after lunch break)
--   Spatio-temporal structure (to end this day)
 :::
 
 ## What we saw: Latent Gaussian Models
@@ -44,7 +49,7 @@ $$
 
 Unemployment rate in France:
 
-```{r echo=FALSE}
+```{r}
 dat <- read.csv("fr_unemploymeny.csv")
 
 ggplot(dat, aes(x = time, 
@@ -66,7 +71,7 @@ We could fit a simple linear trend to the data:
 $$
 unemployment_i = \beta_0 + \beta_1 * time_i + \epsilon_i;  \epsilon_i \sim \mathcal{N}(0, \sigma_{\epsilon}²)
 $$
-```{r echo=FALSE, message=FALSE}
+```{r}
 ggplot(dat, aes(x = time, 
                 y = unemployment)) +
   geom_point(color = "#7D3C98") +
@@ -85,7 +90,7 @@ Limits of a simple linear trend fit are:
 -  we could capture non-linearity by adding polynomials, but this is unstable
 -  issues with i.i.d. assumption - correlation in residuals
 
-```{r echo=FALSE}
+```{r}
 m <- lm(unemployment ~ time, data = dat)
 e <- resid(m)
 acf(ts(e), ylab = "Correlation", main = "Autocorrelation of lm residuals")
@@ -99,7 +104,7 @@ We could also add time in a random-intercept model:
 $$
 unemployment = \beta_0 + u_{t(i)} + \epsilon_i; u_{t(i)} \sim \mathcal{N}(0, \sigma_{t}²)
 $$
-```{r echo=FALSE, message=FALSE, warning=FALSE}
+```{r}
 dat$time_f <- factor(dat$time)
 m_mix <- stan_lmer(unemployment ~ 1 + (1 | time_f), data = dat, refresh = 0)
 
@@ -139,10 +144,10 @@ Various temporal structure model are available via INLA:
 
 |Model | Assumption| inlabru syntax |
 |------|-----------|----------------|
-| AR1 | Each value depends on the previous | f(time, model="ar1") |
-| RW1 | Increments are iid Gaussian | f(time, model="rw1") |
-| RW2 |Second differences are iid Gaussian | f(time, model="rw2") |
-| Seasonal | Periodic structure of period $s$ | f(time, model="seasonal", season.length=s) |
+| AR1 | [Each value depends on the previous]{style="font-size: 0.85em;"} | f(time, model="ar1") |
+| RW1 | [Increments are iid Gaussian]{style="font-size: 0.85em;"} | f(time, model="rw1") |
+| RW2 |[Second differences are iid Gaussian]{style="font-size: 0.85em;"} | f(time, model="rw2") |
+| Seasonal | [Periodic structure of period $s$]{style="font-size: 0.85em;"} | f(time, model="seasonal", season.length=s) |
 |------|-----------|----------------|
 
 ## AR1 structure
@@ -173,7 +178,7 @@ m_ar <- bru(unemployment ~ Intercept(1) + ar_field(time, model = "ar1"),
     )))
 ```
 
-```{r echo=FALSE}
+```{r}
 # grab the preds from the ar model
 pred <- predict(m_ar, dat, ~ Intercept + ar_field) 
 
@@ -203,9 +208,15 @@ RW2 is defined as:
 $$
 \Delta²x_i = (x_i - x_{i-1}) - (x_{i-1} - x_{i-2}) \sim \mathcal{N}(0, \sigma²) 
 $$
--  RW1 - *where I am* depend on where I was -> rough dynamic
--  RW2 - *my trend* depend on my past trend -> smooth
+
+
+
+## RW models
+
+-  RW1 - *where I am* depend on where I was -> **rough dynamic**
+-  RW2 - *my trend* depend on my past trend -> **smooth**
 -  Both model type have one parameter $\sigma$, for RW1 large $\sigma$ means large jumps between time points, for RW2 large $\sigma$ means abrupt change in the trend. 
+
 
 ## RW model in action
 
